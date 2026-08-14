@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="DayBook icon">
+  <rect width="128" height="128" rx="24" fill="#22312b"/>
+  <path d="M34 28h60a8 8 0 0 1 8 8v66a8 8 0 0 1-8 8H34a8 8 0 0 1-8-8V36a8 8 0 0 1 8-8Z" fill="#f7f3e8"/>
+  <path d="M42 48h44M42 65h34M42 82h44" stroke="#22312b" stroke-width="8" stroke-linecap="round"/>
+  <path d="m84 78 8 8 17-20" fill="none" stroke="#d75a3d" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

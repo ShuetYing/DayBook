@@ -4,10 +4,10 @@ DayBook is a local-first personal productivity and learning app for one user. It
 
 ## Features
 
-- Dashboard with task overview and latest activity
-- Tasks with status, deadline, reminder, category, tags, roadblocks, and project linking
-- Project management with overview, sub-tasks, and timeline tabs
-- Knowledge notes with templates, categories, tags, and search
+- Dashboard with task overview, weekly counts, and latest activity
+- Tasks with status, deadlines, reminders, roadblocks, tags, and project linking
+- Projects with overview, linked subtasks, and timeline notes
+- Knowledge notes with a standard template, tags, and search
 - Weekly summaries for completed, incomplete, in-progress, and carried-over work
 - JSON export/import for local backup or moving data between devices
 
@@ -20,12 +20,10 @@ DayBook is a local-first personal productivity and learning app for one user. It
 ## Get The App From GitHub
 
 ```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/DayBook.git
+git clone https://github.com/ShuetYing/DayBook.git
 cd DayBook
 npm install
 ```
-
-Replace `YOUR_GITHUB_USERNAME` with the GitHub account or organization that owns the repository.
 
 ## Run Locally
 
@@ -149,9 +147,9 @@ For another device on the same network, restart the dev server after changes so 
 
 ## Data And Backups
 
-DayBook stores data locally in the browser. There is no hosted backend, account, or cloud sync.
+DayBook stores data locally in the browser with IndexedDB. There is no hosted backend, account, or cloud sync.
 
-Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to restore or move data to another device. Import replaces the current local DayBook data.
+Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to merge another DayBook export into the current local data.
 
 ## Reminders
 
