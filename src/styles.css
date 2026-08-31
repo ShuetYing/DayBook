@@ -353,6 +353,16 @@ h3 {
   margin-top: 12px;
 }
 
+.captureList {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.captureList .miniCard {
+  margin-bottom: 0;
+}
+
 .editSection .panel {
   background: var(--surface-2);
 }

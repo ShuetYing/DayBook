@@ -1,4 +1,4 @@
-import type { Note, Task, WeeklySummary } from './types';
+import type { DayBookData, WeeklyLog } from './types';
 
 export function parseTags(value: string): string[] {
   return [...new Set(value.split(',').map((tag) => tag.trim()).filter(Boolean))];
@@ -22,47 +22,57 @@ export function getWeekBounds(today = new Date()): { start: Date; end: Date } {
   return { start, end };
 }
 
-export function buildWeeklySummary(tasks: Task[], notes: Note[], today = new Date()): WeeklySummary {
-  const { start, end } = getWeekBounds(today);
-  const weekTasks = tasks.filter((task) => isWithin(task.updatedAt || task.createdAt, start, end));
-  const completedTasks = weekTasks.filter((task) => task.status === 'done');
-  const completed = completedTasks.length;
-  const incomplete = tasks.filter((task) => task.status !== 'done').length;
-  const inProgressTasks = tasks.filter((task) => task.status === 'in-progress');
-  const inProgress = inProgressTasks.length;
-  const carriedForwardTasks = tasks.filter((task) => task.status !== 'done' && task.dueAt && new Date(task.dueAt) < start);
-  const carriedForward = carriedForwardTasks.length;
-  const noteHighlights = notes
-    .filter((note) => isWithin(note.updatedAt || note.createdAt, start, end))
-    .slice(0, 5)
-    .map((note) => note.title || note.body.slice(0, 60));
-
-  const completedLine = completedTasks.length
-    ? `Completed: ${completedTasks.slice(0, 4).map((task) => task.title).join('; ')}.`
-    : 'Completed: none recorded this week.';
-  const inProgressLine = inProgressTasks.length
-    ? `In progress: ${inProgressTasks.slice(0, 4).map((task) => task.title).join('; ')}.`
-    : 'In progress: none.';
-  const carriedLine = carriedForwardTasks.length
-    ? `Carried over: ${carriedForwardTasks.slice(0, 4).map((task) => task.title).join('; ')}.`
-    : 'Carried over: none.';
-  const learningLine = noteHighlights.length
-    ? `Learning: ${noteHighlights.join('; ')}.`
-    : 'Learning: none recorded this week.';
-  const generatedText = [completedLine, inProgressLine, carriedLine, learningLine].join(' ');
-
+export function emptyWeeklyLog(weekStart: string, now: string): WeeklyLog {
   return {
-    id: `${formatDateInput(start)}-${formatDateInput(end)}`,
-    weekStart: formatDateInput(start),
-    weekEnd: formatDateInput(end),
-    generatedText,
-    taskStats: { completed, incomplete, inProgress, carriedForward },
-    noteHighlights,
-    createdAt: new Date().toISOString()
+    id: weekStart,
+    weekStart,
+    learned: '',
+    workedOn: '',
+    blockers: '',
+    solved: '',
+    impact: '',
+    openQuestions: '',
+    nextWeek: '',
+    tags: [],
+    createdAt: now,
+    updatedAt: now
   };
 }
 
-function isWithin(value: string, start: Date, end: Date): boolean {
-  const date = new Date(value);
-  return date >= start && date <= end;
+export function generateWeeklyReviewDraft(data: DayBookData, selectedDate = new Date(), now = new Date().toISOString()): WeeklyLog {
+  const { start, end } = getWeekBounds(selectedDate);
+  const weekStart = formatDateInput(start);
+  const inWeek = (value: string) => {
+    const date = new Date(value);
+    return date >= start && date <= end;
+  };
+  const titles = (items: { title?: string; name?: string; question?: string; text?: string }[]) =>
+    items.map((item) => item.title || item.name || item.question || item.text || '').filter(Boolean).join('\n');
+
+  const notes = data.notes.filter((note) => inWeek(note.createdAt));
+  const solved = data.troubleshooting.filter((entry) => entry.dateResolved && inWeek(`${entry.dateResolved}T12:00:00`));
+  const answered = data.questions.filter((question) => question.status === 'Answered' && inWeek(question.updatedAt));
+  const systems = data.systems.filter((system) => inWeek(system.updatedAt));
+  const captures = data.captures.filter((capture) => inWeek(capture.createdAt));
+  const doneTasks = data.tasks.filter((task) => task.status === 'done' && inWeek(task.updatedAt));
+  const openQuestions = data.questions.filter((question) => question.status !== 'Answered');
+
+  return {
+    ...emptyWeeklyLog(weekStart, now),
+    learned: titles(notes),
+    workedOn: titles([...doneTasks, ...systems, ...captures]),
+    blockers: titles(data.tasks.filter((task) => task.roadblock && task.status !== 'done')),
+    solved: titles(solved),
+    impact: doneTasks.map((task) => task.title).join('\n'),
+    openQuestions: titles(openQuestions),
+    nextWeek: titles([...openQuestions, ...answered]).split('\n').slice(0, 5).join('\n'),
+    tags: ['weekly-review']
+  };
+}
+
+export function weeklyLogReminderWeek(weeklyLogs: WeeklyLog[], now = new Date(), remindedWeeks = new Set<string>()): string {
+  const weekStart = formatDateInput(getWeekBounds(now).start);
+  if (now.getDay() !== 5 || now.getHours() < 15) return '';
+  if (weeklyLogs.some((log) => log.weekStart === weekStart) || remindedWeeks.has(weekStart)) return '';
+  return weekStart;
 }

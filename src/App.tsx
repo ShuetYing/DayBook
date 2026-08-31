@@ -1,45 +1,98 @@
 import { Dispatch, FormEvent, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { buildWeeklySummary, formatDateInput, parseTags } from './summary';
-import { loadData, saveData } from './storage';
-import type { Activity, AppSettings, DayBookData, Note, Project, Task, TaskStatus, WeeklySummary } from './types';
+import { backupBlob } from './backup';
+import { emptyWeeklyLog, formatDateInput, generateWeeklyReviewDraft, getWeekBounds, parseTags, weeklyLogReminderWeek } from './summary';
+import { loadBackupHandle, loadData, saveBackupHandle, saveData } from './storage';
+import type {
+  Activity,
+  AppSettings,
+  DayBookData,
+  Note,
+  Project,
+  QuestionEntry,
+  QuestionStatus,
+  QuickCapture,
+  SystemEntry,
+  Task,
+  TaskStatus,
+  TroubleshootingEntry,
+  WeeklyLog
+} from './types';
 
-type Page = 'dashboard' | 'tasks' | 'projects' | 'knowledge' | 'weekly' | 'settings';
+type Page = 'dashboard' | 'tasks' | 'projects' | 'knowledge' | 'weekly' | 'systems' | 'troubleshooting' | 'questions' | 'search' | 'settings';
 type ProjectTab = 'overview' | 'subtasks' | 'timeline';
+type PrefillTarget = 'knowledge' | 'weekly' | 'troubleshooting' | 'questions';
+type BackupFileHandle = {
+  createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
+  queryPermission?: (options?: { mode: 'readwrite' }) => Promise<PermissionState>;
+  requestPermission?: (options?: { mode: 'readwrite' }) => Promise<PermissionState>;
+};
 
-const emptyData: DayBookData = { tasks: [], notes: [], projects: [], activities: [], weeklySummaries: [], settings: { theme: 'mint' } };
-// Keep the default note body in one place so future tweaks only touch this string.
-const standardNoteTemplate = 'What I learned\n\nWhy it matters\n\nExample / command\n\nNext step\n';
-const presetTags = ['Analysis', 'Tech stack', 'Troubleshooting', 'Other'];
+const emptyData: DayBookData = {
+  tasks: [],
+  notes: [],
+  projects: [],
+  activities: [],
+  weeklyLogs: [],
+  systems: [],
+  troubleshooting: [],
+  questions: [],
+  captures: [],
+  settings: { theme: 'mint' }
+};
+const standardNoteTemplate = 'Summary / What I learned\n\nContext / Where this is used\n\nDetails\n\nExample / command\n\nRelated systems\n\nTags\n\nOpen questions\n';
+const presetTags = ['pipeline', 'debugging', 'sql', 'python', 'database', 'cloud', 'manufacturing', 'process', 'system', 'troubleshooting'];
 const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'tasks', label: 'Tasks' },
   { page: 'projects', label: 'Projects' },
   { page: 'knowledge', label: 'Knowledge Repo' },
-  { page: 'weekly', label: 'Weekly Summary' },
+  { page: 'weekly', label: 'Weekly Logs' },
+  { page: 'systems', label: 'Systems' },
+  { page: 'troubleshooting', label: 'Troubleshooting' },
+  { page: 'questions', label: 'Questions' },
+  { page: 'search', label: 'Search' },
   { page: 'settings', label: 'Settings' }
 ];
+
 export default function App() {
   const [data, setData] = useState<DayBookData>(emptyData);
   const [ready, setReady] = useState(false);
   const [page, setPage] = useState<Page>('dashboard');
   const [message, setMessage] = useState('');
-  const [noteQuery, setNoteQuery] = useState('');
+  const [backupHandle, setBackupHandle] = useState<BackupFileHandle | null>(null);
+  const [backupStatus, setBackupStatus] = useState('Auto backup is not set up.');
+  const [query, setQuery] = useState('');
   const [weekDate, setWeekDate] = useState(formatDateInput(new Date()));
+  const [weeklyDraft, setWeeklyDraft] = useState(emptyWeeklyLog(formatDateInput(getWeekBounds().start), new Date().toISOString()));
+  const [prefill, setPrefill] = useState<Partial<Record<PrefillTarget, string>>>({});
   const [projectTabs, setProjectTabs] = useState<Record<string, ProjectTab>>({});
   const [expandedActivity, setExpandedActivity] = useState(false);
   const [expandedDashboardTasks, setExpandedDashboardTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
   const notified = useRef(new Set<string>());
+  const notifiedWeeklyLogs = useRef(new Set<string>());
   const messageTimer = useRef<number | null>(null);
 
   useEffect(() => {
-    loadData().then(setData).finally(() => setReady(true));
+    Promise.all([loadData(), loadBackupHandle<BackupFileHandle>()]).then(([savedData, savedHandle]) => {
+      setData(savedData);
+      if (savedHandle) {
+        setBackupHandle(savedHandle);
+        setBackupStatus('Auto backup file selected.');
+      }
+    }).finally(() => setReady(true));
   }, []);
 
   useEffect(() => {
     if (ready) saveData(data);
   }, [data, ready]);
+
+  useEffect(() => {
+    if (!ready || !backupHandle) return;
+    const timer = window.setTimeout(() => writeBackup(backupHandle, data, setBackupStatus), 600);
+    return () => window.clearTimeout(timer);
+  }, [backupHandle, data, ready]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = data.settings.theme;
@@ -51,8 +104,23 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, [data.tasks]);
 
+  useEffect(() => {
+    const check = () => notifyMissingWeeklyLog(data.weeklyLogs, notifiedWeeklyLogs.current, flashMessage);
+    const timer = window.setInterval(check, 60_000);
+    check();
+    return () => window.clearInterval(timer);
+  }, [data.weeklyLogs]);
+
+  useEffect(() => () => {
+    if (messageTimer.current != null) window.clearTimeout(messageTimer.current);
+  }, []);
+
+  useEffect(() => {
+    const weekStart = formatDateInput(getWeekBounds(new Date(`${weekDate}T12:00:00`)).start);
+    setWeeklyDraft(data.weeklyLogs.find((log) => log.weekStart === weekStart) ?? emptyWeeklyLog(weekStart, new Date().toISOString()));
+  }, [data.weeklyLogs, weekDate]);
+
   const today = formatDateInput(new Date());
-  const selectedSummary = useMemo(() => buildWeeklySummary(data.tasks, data.notes, new Date(`${weekDate}T12:00:00`)), [data.tasks, data.notes, weekDate]);
   const todayDate = new Date();
   const todayLabel = todayDate.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
   const currentPage = navItems.find((item) => item.page === page);
@@ -68,10 +136,6 @@ export default function App() {
     if (messageTimer.current != null) window.clearTimeout(messageTimer.current);
     messageTimer.current = window.setTimeout(() => setMessage(''), 1800);
   }
-
-  useEffect(() => () => {
-    if (messageTimer.current != null) window.clearTimeout(messageTimer.current);
-  }, []);
 
   function withActivity(current: DayBookData, message: string, now: string): Activity[] {
     return [{ id: crypto.randomUUID(), message, createdAt: now }, ...current.activities].slice(0, 30);
@@ -102,7 +166,6 @@ export default function App() {
       activities: withActivity(current, `Created task: ${title}`, now)
     }));
     flashMessage(`Task created: ${title}`);
-    setExpandedTasks((current) => ({ ...current, draft: false }));
     event.currentTarget.reset();
   }
 
@@ -148,11 +211,6 @@ export default function App() {
       activities: withActivity(current, `Deleted task: ${task.title}`, now)
     }));
     flashMessage(`Task deleted: ${task.title}`);
-    setExpandedTasks((current) => {
-      const copy = { ...current };
-      delete copy[task.id];
-      return copy;
-    });
   }
 
   function addProject(event: FormEvent<HTMLFormElement>) {
@@ -168,17 +226,16 @@ export default function App() {
         name,
         overview: String(form.get('overview') || '').trim(),
         details: String(form.get('details') || '').trim(),
-        progress: String(form.get('progress') || '').trim(),
+        progress: '',
         timeline: String(form.get('timeline') || '').trim(),
         category: '',
-        tags: [],
+        tags: parseTags(String(form.get('tags') || '')),
         createdAt: now,
         updatedAt: now
       }, ...current.projects],
       activities: withActivity(current, `Created project: ${name}`, now)
     }));
     flashMessage(`Project created: ${name}`);
-    setExpandedProjects((current) => ({ ...current, draft: false }));
     event.currentTarget.reset();
   }
 
@@ -195,14 +252,13 @@ export default function App() {
         name,
         overview: String(form.get('overview') || '').trim(),
         details: String(form.get('details') || '').trim(),
-        progress: String(form.get('progress') || '').trim(),
         timeline: String(form.get('timeline') || '').trim(),
+        tags: parseTags(String(form.get('tags') || '')),
         updatedAt: now
       } : project),
       activities: withActivity(current, `Updated project: ${name}`, now)
     }));
     flashMessage(`Project updated: ${name}`);
-    setExpandedProjects((current) => ({ ...current, [id]: false }));
   }
 
   function deleteProject(project: Project) {
@@ -213,19 +269,14 @@ export default function App() {
       activities: withActivity(current, `Deleted project: ${project.name}`, now)
     }));
     flashMessage(`Project deleted: ${project.name}`);
-    setExpandedProjects((current) => {
-      const copy = { ...current };
-      delete copy[project.id];
-      return copy;
-    });
   }
 
   function addNote(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
     const body = String(form.get('body') || '').trim();
-    if (!body) return;
-    const title = String(form.get('title') || '').trim() || 'Untitled note';
+    if (!title || !body) return;
 
     updateData((current, now) => ({
       ...current,
@@ -238,9 +289,10 @@ export default function App() {
         createdAt: now,
         updatedAt: now
       }, ...current.notes],
-      activities: withActivity(current, `Created note: ${title}`, now)
+      activities: withActivity(current, `Created knowledge note: ${title}`, now)
     }));
-    flashMessage(`Note created: ${title}`);
+    setPrefill((current) => ({ ...current, knowledge: '' }));
+    flashMessage(`Knowledge note saved: ${title}`);
     event.currentTarget.reset();
   }
 
@@ -248,27 +300,182 @@ export default function App() {
     updateData((current, now) => ({
       ...current,
       notes: current.notes.filter((item) => item.id !== note.id),
-      activities: withActivity(current, `Deleted note: ${note.title}`, now)
+      activities: withActivity(current, `Deleted knowledge note: ${note.title}`, now)
     }));
-    flashMessage(`Note deleted: ${note.title}`);
+    flashMessage(`Knowledge note deleted: ${note.title}`);
   }
 
-  function saveWeeklySummary(summary: WeeklySummary) {
+  function saveWeeklyLog(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     updateData((current, now) => ({
       ...current,
-      weeklySummaries: [summary, ...current.weeklySummaries.filter((item) => item.id !== summary.id)],
-      activities: withActivity(current, `Saved weekly summary: ${summary.weekStart} to ${summary.weekEnd}`, now)
+      weeklyLogs: [{ ...weeklyDraft, updatedAt: now }, ...current.weeklyLogs.filter((log) => log.id !== weeklyDraft.id)],
+      activities: withActivity(current, `Saved weekly log: ${weeklyDraft.weekStart}`, now)
     }));
-    flashMessage(`Saved weekly log: ${summary.weekStart} to ${summary.weekEnd}`);
+    setPrefill((current) => ({ ...current, weekly: '' }));
+    flashMessage(`Weekly log saved: ${weeklyDraft.weekStart}`);
   }
 
-  function deleteWeeklySummary(summary: WeeklySummary) {
+  function deleteWeeklyLog(log: WeeklyLog) {
     updateData((current, now) => ({
       ...current,
-      weeklySummaries: current.weeklySummaries.filter((item) => item.id !== summary.id),
-      activities: withActivity(current, `Deleted weekly summary: ${summary.weekStart} to ${summary.weekEnd}`, now)
+      weeklyLogs: current.weeklyLogs.filter((item) => item.id !== log.id),
+      activities: withActivity(current, `Deleted weekly log: ${log.weekStart}`, now)
     }));
-    flashMessage(`Deleted weekly log: ${summary.weekStart} to ${summary.weekEnd}`);
+    flashMessage(`Weekly log deleted: ${log.weekStart}`);
+  }
+
+  function addSystem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const entry = systemFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.name) return;
+    updateData((current, now) => ({
+      ...current,
+      systems: [{ ...entry, id: crypto.randomUUID(), createdAt: now, updatedAt: now }, ...current.systems],
+      activities: withActivity(current, `Created system: ${entry.name}`, now)
+    }));
+    flashMessage(`System saved: ${entry.name}`);
+    event.currentTarget.reset();
+  }
+
+  function updateSystem(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const entry = systemFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.name) return;
+    updateData((current, now) => ({
+      ...current,
+      systems: current.systems.map((system) => system.id === id ? { ...system, ...entry, createdAt: system.createdAt, updatedAt: now } : system),
+      activities: withActivity(current, `Updated system: ${entry.name}`, now)
+    }));
+    flashMessage(`System updated: ${entry.name}`);
+  }
+
+  function deleteSystem(system: SystemEntry) {
+    updateData((current, now) => ({
+      ...current,
+      systems: current.systems.filter((item) => item.id !== system.id),
+      activities: withActivity(current, `Deleted system: ${system.name}`, now)
+    }));
+    flashMessage(`System deleted: ${system.name}`);
+  }
+
+  function addTroubleshooting(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const entry = troubleshootingFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.title) return;
+    updateData((current, now) => ({
+      ...current,
+      troubleshooting: [{ ...entry, id: crypto.randomUUID(), createdAt: now, updatedAt: now }, ...current.troubleshooting],
+      activities: withActivity(current, `Created troubleshooting entry: ${entry.title}`, now)
+    }));
+    setPrefill((current) => ({ ...current, troubleshooting: '' }));
+    flashMessage(`Troubleshooting saved: ${entry.title}`);
+    event.currentTarget.reset();
+  }
+
+  function updateTroubleshooting(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const entry = troubleshootingFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.title) return;
+    updateData((current, now) => ({
+      ...current,
+      troubleshooting: current.troubleshooting.map((item) => item.id === id ? { ...item, ...entry, createdAt: item.createdAt, updatedAt: now } : item),
+      activities: withActivity(current, `Updated troubleshooting entry: ${entry.title}`, now)
+    }));
+    flashMessage(`Troubleshooting updated: ${entry.title}`);
+  }
+
+  function deleteTroubleshooting(entry: TroubleshootingEntry) {
+    updateData((current, now) => ({
+      ...current,
+      troubleshooting: current.troubleshooting.filter((item) => item.id !== entry.id),
+      activities: withActivity(current, `Deleted troubleshooting entry: ${entry.title}`, now)
+    }));
+    flashMessage(`Troubleshooting deleted: ${entry.title}`);
+  }
+
+  function addQuestion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const question = String(form.get('question') || '').trim();
+    if (!question) return;
+    updateData((current, now) => ({
+      ...current,
+      questions: [{
+        id: crypto.randomUUID(),
+        question,
+        status: String(form.get('status') || 'Open') as QuestionStatus,
+        relatedSystem: String(form.get('relatedSystem') || '').trim(),
+        relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
+        notes: String(form.get('notes') || '').trim(),
+        createdAt: now,
+        updatedAt: now
+      }, ...current.questions],
+      activities: withActivity(current, `Created question: ${question}`, now)
+    }));
+    setPrefill((current) => ({ ...current, questions: '' }));
+    flashMessage('Question saved.');
+    event.currentTarget.reset();
+  }
+
+  function updateQuestion(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const question = String(form.get('question') || '').trim();
+    if (!question) return;
+    updateData((current, now) => ({
+      ...current,
+      questions: current.questions.map((item) => item.id === id ? {
+        ...item,
+        question,
+        status: String(form.get('status') || 'Open') as QuestionStatus,
+        relatedSystem: String(form.get('relatedSystem') || '').trim(),
+        relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
+        notes: String(form.get('notes') || '').trim(),
+        updatedAt: now
+      } : item),
+      activities: withActivity(current, `Updated question: ${question}`, now)
+    }));
+    flashMessage('Question updated.');
+  }
+
+  function deleteQuestion(question: QuestionEntry) {
+    updateData((current, now) => ({
+      ...current,
+      questions: current.questions.filter((item) => item.id !== question.id),
+      activities: withActivity(current, `Deleted question: ${question.question}`, now)
+    }));
+    flashMessage('Question deleted.');
+  }
+
+  function addCapture(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const text = String(form.get('text') || '').trim();
+    if (!text) return;
+    updateData((current, now) => ({
+      ...current,
+      captures: [{ id: crypto.randomUUID(), text, tags: parseTags(String(form.get('tags') || '')), createdAt: now, updatedAt: now }, ...current.captures],
+      activities: withActivity(current, 'Added quick capture', now)
+    }));
+    flashMessage('Captured.');
+    event.currentTarget.reset();
+  }
+
+  function deleteCapture(capture: QuickCapture) {
+    updateData((current, now) => ({
+      ...current,
+      captures: current.captures.filter((item) => item.id !== capture.id),
+      activities: withActivity(current, 'Deleted quick capture', now)
+    }));
+  }
+
+  function convertCapture(capture: QuickCapture, target: PrefillTarget) {
+    setPrefill((current) => ({ ...current, [target]: capture.text }));
+    if (target === 'weekly') {
+      setWeeklyDraft((current) => ({ ...current, workedOn: joinLines(current.workedOn, capture.text) }));
+    }
+    setPage(target === 'weekly' ? 'weekly' : target);
   }
 
   async function enableNotifications() {
@@ -281,13 +488,36 @@ export default function App() {
   }
 
   function exportJson() {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const blob = backupBlob(data);
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `daybook-${today}.json`;
     link.click();
     URL.revokeObjectURL(url);
+  }
+
+  async function chooseBackupFile() {
+    const picker = (window as typeof window & {
+      showSaveFilePicker?: (options?: unknown) => Promise<BackupFileHandle>;
+    }).showSaveFilePicker;
+    if (!picker) {
+      flashMessage('Auto backup needs a Chromium browser with file picker support.');
+      setBackupStatus('Auto backup is not supported in this browser. Use Export JSON.');
+      return;
+    }
+    try {
+      const handle = await picker({
+        suggestedName: `daybook-autobackup-${today}.json`,
+        types: [{ description: 'JSON backup', accept: { 'application/json': ['.json'] } }]
+      });
+      await saveBackupHandle(handle);
+      setBackupHandle(handle);
+      await writeBackup(handle, data, setBackupStatus);
+      flashMessage('Auto backup file selected.');
+    } catch {
+      setBackupStatus('Auto backup setup was cancelled.');
+    }
   }
 
   async function importJson(file: File | undefined) {
@@ -307,15 +537,14 @@ export default function App() {
     setExpandedProjects({});
     setExpandedActivity(false);
     notified.current.clear();
+    notifiedWeeklyLogs.current.clear();
     flashMessage('All local DayBook data removed.');
   }
 
   return (
     <div className="app">
       <aside className="sidebar" aria-label="Main features">
-        <div>
-          <h1>DayBook</h1>
-        </div>
+        <div><h1>DayBook</h1></div>
         <nav>
           {navItems.map((item) => (
             <button className={page === item.page ? 'active' : ''} type="button" key={item.page} onClick={() => setPage(item.page)}>
@@ -336,109 +565,81 @@ export default function App() {
         <div className={`notice ${message ? 'show' : ''}`} aria-live="polite">{message}</div>
 
         {page === 'dashboard' && (
-          <Dashboard 
-            data={data} 
-            today={today} 
-            todayLabel={todayLabel} 
-            projectsById={projectsById} 
+          <Dashboard
+            data={data}
+            today={today}
+            todayLabel={todayLabel}
+            projectsById={projectsById}
             setPage={setPage}
+            addCapture={addCapture}
+            convertCapture={convertCapture}
+            deleteCapture={deleteCapture}
             expandedDashboardTasks={expandedDashboardTasks}
             setExpandedDashboardTasks={setExpandedDashboardTasks}
             expandedActivity={expandedActivity}
             setExpandedActivity={setExpandedActivity}
           />
         )}
-        {page === 'tasks' && (
-          <TasksPage
-            data={data}
-            addTask={addTask}
-            updateTask={updateTask}
-            toggleTask={toggleTask}
-            deleteTask={deleteTask}
-            expandedTasks={expandedTasks}
-            setExpandedTasks={setExpandedTasks}
-          />
-        )}
-        {page === 'projects' && (
-          <ProjectsPage
-            data={data}
-            projectTabs={projectTabs}
-            setProjectTabs={setProjectTabs}
-            addProject={addProject}
-            updateProject={updateProject}
-            deleteProject={deleteProject}
-            expandedProjects={expandedProjects}
-            setExpandedProjects={setExpandedProjects}
-          />
-        )}
-        {page === 'knowledge' && (
-          <KnowledgePage
-            notes={data.notes}
-            noteQuery={noteQuery}
-            setNoteQuery={setNoteQuery}
-            addNote={addNote}
-            deleteNote={deleteNote}
-          />
-        )}
-        {page === 'weekly' && (
-          <WeeklyPage
-            summary={selectedSummary}
-            weekDate={weekDate}
-            setWeekDate={setWeekDate}
-            saved={data.weeklySummaries}
-            tasks={data.tasks}
-            notes={data.notes}
-            saveWeeklySummary={saveWeeklySummary}
-            deleteWeeklySummary={deleteWeeklySummary}
-          />
-        )}
-        {page === 'settings' && <SettingsPage data={data} exportJson={exportJson} importJson={importJson} enableNotifications={enableNotifications} settings={data.settings} updateSettings={(settings) => setData((current) => ({ ...current, settings }))} clearAllData={clearAllData} />}
+        {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
+        {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
+        {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} deleteNote={deleteNote} />}
+        {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
+        {page === 'systems' && <SystemsPage systems={data.systems} addSystem={addSystem} updateSystem={updateSystem} deleteSystem={deleteSystem} />}
+        {page === 'troubleshooting' && <TroubleshootingPage entries={data.troubleshooting} prefill={prefill.troubleshooting} addTroubleshooting={addTroubleshooting} updateTroubleshooting={updateTroubleshooting} deleteTroubleshooting={deleteTroubleshooting} />}
+        {page === 'questions' && <QuestionsPage questions={data.questions} prefill={prefill.questions} addQuestion={addQuestion} updateQuestion={updateQuestion} deleteQuestion={deleteQuestion} />}
+        {page === 'search' && <SearchPage data={data} query={query} setQuery={setQuery} />}
+        {page === 'settings' && <SettingsPage data={data} exportJson={exportJson} importJson={importJson} chooseBackupFile={chooseBackupFile} backupStatus={backupStatus} enableNotifications={enableNotifications} settings={data.settings} updateSettings={(settings) => setData((current) => ({ ...current, settings }))} clearAllData={clearAllData} />}
       </main>
     </div>
   );
 }
 
-function Dashboard({ data, today, todayLabel, projectsById, setPage, expandedDashboardTasks, setExpandedDashboardTasks, expandedActivity, setExpandedActivity }: {
+function Dashboard({ data, today, todayLabel, projectsById, setPage, addCapture, convertCapture, deleteCapture, expandedDashboardTasks, setExpandedDashboardTasks, expandedActivity, setExpandedActivity }: {
   data: DayBookData;
   today: string;
   todayLabel: string;
   projectsById: Map<string, Project>;
   setPage: (page: Page) => void;
+  addCapture: (event: FormEvent<HTMLFormElement>) => void;
+  convertCapture: (capture: QuickCapture, target: PrefillTarget) => void;
+  deleteCapture: (capture: QuickCapture) => void;
   expandedDashboardTasks: boolean;
   setExpandedDashboardTasks: Dispatch<SetStateAction<boolean>>;
   expandedActivity: boolean;
   setExpandedActivity: Dispatch<SetStateAction<boolean>>;
 }) {
-  const now = Date.now();
+  const { start, end } = getWeekBounds();
+  const inWeek = (value: string) => new Date(value) >= start && new Date(value) <= end;
   const openTasks = data.tasks.filter((task) => task.status !== 'done');
   const todayTasks = openTasks.filter((task) => task.dueAt.slice(0, 10) === today);
-  const expiredTasks = openTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < now);
-  const reminders = openTasks.filter((task) => task.reminderAt);
-  const inProgress = data.tasks.filter((task) => task.status === 'in-progress');
-  const completed = data.tasks.filter((task) => task.status === 'done');
+  const expiredTasks = openTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < Date.now());
+  const currentWeekLog = data.weeklyLogs.find((log) => log.weekStart === formatDateInput(start));
   const dashboardStats = [
-    { key: 'in-progress', label: 'In progress', count: inProgress.length, emoji: '🛠️', onClick: () => setPage('tasks') },
-    { key: 'today', label: 'Today', count: todayTasks.length, emoji: '📅', onClick: () => setPage('tasks') },
-    { key: 'expired', label: 'Expired', count: expiredTasks.length, emoji: '⏰', onClick: () => setPage('tasks') },
-    { key: 'reminders', label: 'Reminders', count: reminders.length, emoji: '🔔', onClick: () => setPage('tasks') },
-    { key: 'completed', label: 'Completed', count: completed.length, emoji: '✅', onClick: () => setPage('weekly') }
+    { key: 'today', label: 'Today', count: todayTasks.length, emoji: 'Today', onClick: () => setPage('tasks') },
+    { key: 'knowledge', label: 'Learned', count: data.notes.filter((note) => inWeek(note.createdAt)).length, emoji: 'Notes', onClick: () => setPage('knowledge') },
+    { key: 'solved', label: 'Solved', count: data.troubleshooting.filter((entry) => entry.dateResolved && inWeek(`${entry.dateResolved}T12:00:00`)).length, emoji: 'Fixes', onClick: () => setPage('troubleshooting') },
+    { key: 'questions', label: 'Questions', count: data.questions.filter((question) => question.status !== 'Answered').length, emoji: 'Open', onClick: () => setPage('questions') },
+    { key: 'expired', label: 'Expired', count: expiredTasks.length, emoji: 'Due', onClick: () => setPage('tasks') }
   ];
-  const recentTasks = [...data.tasks]
-    .sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
+  const recentTasks = [...data.tasks].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 
   return (
     <>
-      <section className="summary dashboardSummary" aria-label="Weekly summary">
+      <section className="summary dashboardSummary" aria-label="Current week">
+        <div>
+          <h2>Week of {formatDateInput(start)} to {formatDateInput(end)}</h2>
+          <p className="pageSubhead">{todayLabel}</p>
+        </div>
+        <button type="button" onClick={() => setPage('weekly')}>{currentWeekLog ? 'Open weekly log' : 'Start weekly log'}</button>
+      </section>
+      <section className="summary dashboardSummary">
         <div className="stats">
           {dashboardStats.map((item) => (
             <button className="statButton" type="button" key={item.key} onClick={item.onClick}>
               <strong className={`statCard ${item.key}`}>
                 <span className="statLabel">{item.label}</span>
-                <span className="statValueRow">
-                  <span className="statValue">{item.count}</span>
-                  <span className="statEmoji" aria-hidden="true">{item.emoji}</span>
-                </span>
-                <span className="statMeta">{item.key === 'completed' ? `${item.count} done` : `${item.count} tasks`}</span>
+                <span className="statValue">{item.count}</span>
+                <span className="statMeta">{item.emoji}</span>
               </strong>
             </button>
           ))}
@@ -446,13 +647,17 @@ function Dashboard({ data, today, todayLabel, projectsById, setPage, expandedDas
       </section>
 
       <section className="dashboardGrid">
+        <Panel title="Quick capture">
+          <form onSubmit={addCapture}>
+            <label>Capture<textarea name="text" rows={4} placeholder="Paste a term, error, decision, question, or meeting note..." required /></label>
+            <label>Tags<input name="tags" placeholder="pipeline, sql" /></label>
+            <button type="submit">Capture</button>
+          </form>
+          <CaptureList captures={data.captures.slice(0, 5)} convertCapture={convertCapture} deleteCapture={deleteCapture} />
+        </Panel>
         <Panel title="Task overview">
           <TaskList tasks={expandedDashboardTasks ? recentTasks : recentTasks.slice(0, 3)} projectsById={projectsById} empty="No tasks yet." compact />
-          {recentTasks.length > 3 ? (
-            <button style={{ marginTop: '16px' }} type="button" onClick={() => setExpandedDashboardTasks((value) => !value)}>
-              {expandedDashboardTasks ? 'Show less' : 'Show more'}
-            </button>
-          ) : null}
+          {recentTasks.length > 3 ? <button style={{ marginTop: '16px' }} type="button" onClick={() => setExpandedDashboardTasks((value) => !value)}>{expandedDashboardTasks ? 'Show less' : 'Show more'}</button> : null}
         </Panel>
         <Panel title="Latest activity">
           <ActivityList activities={data.activities} expanded={expandedActivity} onToggleExpanded={() => setExpandedActivity((value) => !value)} />
@@ -472,24 +677,15 @@ function TasksPage({ data, addTask, updateTask, toggleTask, deleteTask, expanded
   setExpandedTasks: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
-  const [showCreate, setShowCreate] = useState(false);
-
-  useEffect(() => {
-    if (data.tasks.length === 0) {
-      setShowCreate(true);
-    }
-  }, [data.tasks.length]);
-
+  const [showCreate, setShowCreate] = useState(data.tasks.length === 0);
+  const open = data.tasks.filter((task) => task.status !== 'done');
+  const done = data.tasks.filter((task) => task.status === 'done');
   return (
     <section className="stack">
-      <div className="pageActions">
-        <div />
-        <button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new task' : 'Create new task'}</button>
-      </div>
+      <div className="pageActions"><div /><button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new task' : 'Create new task'}</button></div>
       {showCreate ? <TaskForm title="Add task" onSubmit={(event) => { addTask(event); setShowCreate(false); }} projects={data.projects} onCancel={() => setShowCreate(false)} /> : null}
-      <div>
-        <TaskList tasks={data.tasks} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No tasks yet." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} />
-      </div>
+      <Panel title="Open tasks"><TaskList tasks={open} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No open tasks." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} /></Panel>
+      <Panel title="Completed tasks"><TaskList tasks={done} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No completed tasks yet." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} /></Panel>
     </section>
   );
 }
@@ -504,65 +700,34 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
   expandedProjects: Record<string, boolean>;
   setExpandedProjects: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
-  const [showCreate, setShowCreate] = useState(false);
-
-  useEffect(() => {
-    if (data.projects.length === 0) {
-      setShowCreate(true);
-    }
-  }, [data.projects.length]);
-
+  const [showCreate, setShowCreate] = useState(data.projects.length === 0);
   return (
     <section className="stack">
-      <div className="pageActions">
-        <div />
-        <button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new project' : 'Create new project'}</button>
-      </div>
+      <div className="pageActions"><div /><button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new project' : 'Create new project'}</button></div>
       {showCreate ? <ProjectForm title="New project" onSubmit={(event) => { addProject(event); setShowCreate(false); }} onCancel={() => setShowCreate(false)} /> : null}
       <div className="taskList">
         {data.projects.length === 0 ? <p className="empty">No projects yet.</p> : data.projects.map((project) => {
           const tab = projectTabs[project.id] ?? 'overview';
           const subtasks = data.tasks.filter((task) => task.projectId === project.id);
-          const dueDate = getProjectDueDate(project.timeline);
           const expanded = expandedProjects[project.id] ?? false;
           return (
             <article className="card" key={project.id}>
               <div className="cardHead">
                 <h3>{project.name}</h3>
                 <div className="cardActions">
-                  <button type="button" onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>
-                    {expanded ? 'Hide' : 'Details'}
-                  </button>
+                  <button type="button" onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>{expanded ? 'Hide' : 'Details'}</button>
                   <button type="button" onClick={() => deleteProject(project)}>Delete</button>
                 </div>
               </div>
-              {!expanded ? (
-                <div className="compactStack">
-                  <p className="due">{dueDate ? `Due ${dueDate}` : 'No due date yet.'}</p>
-                </div>
-              ) : (
+              {!expanded ? <><p>{project.overview || 'No overview yet.'}</p><Meta tags={project.tags} /></> : (
                 <>
                   <div className="tabs">
-                    {(['overview', 'subtasks', 'timeline'] as ProjectTab[]).map((item) => (
-                      <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>
-                        {item === 'subtasks' ? 'Sub-tasks' : item}
-                      </button>
-                    ))}
+                    {(['overview', 'subtasks', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item === 'subtasks' ? 'Sub-tasks' : item}</button>)}
                   </div>
-                  {tab === 'overview' && (
-                    <>
-                      <p>{project.overview || 'No overview yet.'}</p>
-                      <p>{project.details || 'No details yet.'}</p>
-                      <p className="roadblock">{dueDate ? `Due ${dueDate}` : 'No due date yet.'}</p>
-                      <Meta tags={project.tags} />
-                    </>
-                  )}
+                  {tab === 'overview' && <><p>{project.overview || 'No overview yet.'}</p><p>{project.details || 'No details yet.'}</p><Meta tags={project.tags} /></>}
                   {tab === 'subtasks' && <TaskList tasks={subtasks} empty="No tasks linked to this project yet." compact />}
                   {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} />}
-                  <details>
-                    <summary>Edit project</summary>
-                    <ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [project.id]: false }))} />
-                  </details>
+                  <details><summary>Edit project</summary><ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [project.id]: false }))} /></details>
                 </>
               )}
             </article>
@@ -573,39 +738,31 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
   );
 }
 
-function KnowledgePage({ notes, noteQuery, setNoteQuery, addNote, deleteNote }: {
+function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
   notes: Note[];
-  noteQuery: string;
-  setNoteQuery: (query: string) => void;
+  prefill?: string;
   addNote: (event: FormEvent<HTMLFormElement>) => void;
   deleteNote: (note: Note) => void;
 }) {
+  const [noteQuery, setNoteQuery] = useState('');
   const query = noteQuery.toLowerCase();
   const visibleNotes = notes.filter((note) => [note.title, note.body, note.tags.join(' ')].join(' ').toLowerCase().includes(query));
-
   return (
     <section className="grid">
-      <form className="panel" onSubmit={addNote}>
-        <h2>Add learning note</h2>
-        <label>Title<input name="title" placeholder="Partition pruning" /></label>
-        <label>Tags<input name="tags" list="note-tags" placeholder="Analysis, sql" /></label>
-        <label>Note<textarea name="body" rows={10} required defaultValue={standardNoteTemplate} /></label>
+      <form className="panel" onSubmit={addNote} key={prefill ?? 'knowledge'}>
+        <h2>Add knowledge note</h2>
+        <label>Title<input name="title" placeholder="Pipeline trigger mechanism" required /></label>
+        <label>Tags<input name="tags" list="note-tags" placeholder="pipeline, sql" /></label>
+        <label>Note<textarea name="body" rows={12} required defaultValue={prefill ? `${prefill}\n\n${standardNoteTemplate}` : standardNoteTemplate} /></label>
+        <datalist id="note-tags">{presetTags.map((tag) => <option key={tag} value={tag} />)}</datalist>
         <button type="submit">Save note</button>
       </form>
-
       <div>
-        <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, bug, airflow..." /></label>
-        <datalist id="note-tags">
-          {presetTags.map((tag) => <option key={tag} value={tag} />)}
-          {[...new Set(notes.flatMap((note) => note.tags))].map((tag) => <option key={tag} value={tag} />)}
-        </datalist>
+        <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, process, error..." /></label>
         <div className="notes">
           {visibleNotes.length === 0 ? null : visibleNotes.map((note) => (
             <article className="card" key={note.id}>
-              <div className="cardHead">
-                <h3>{note.title}</h3>
-                <button type="button" onClick={() => deleteNote(note)} aria-label={`Delete ${note.title}`}>Delete</button>
-              </div>
+              <div className="cardHead"><h3>{note.title}</h3><button type="button" onClick={() => deleteNote(note)}>Delete</button></div>
               <p className="preline">{note.body}</p>
               <Meta tags={note.tags} />
             </article>
@@ -616,69 +773,40 @@ function KnowledgePage({ notes, noteQuery, setNoteQuery, addNote, deleteNote }: 
   );
 }
 
-function WeeklyPage({ summary, weekDate, setWeekDate, saved, tasks, notes, saveWeeklySummary, deleteWeeklySummary }: {
-  summary: WeeklySummary;
+function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeeklyLog, deleteWeeklyLog, generateDraft }: {
+  data: DayBookData;
   weekDate: string;
   setWeekDate: (value: string) => void;
-  saved: WeeklySummary[];
-  tasks: Task[];
-  notes: Note[];
-  saveWeeklySummary: (summary: WeeklySummary) => void;
-  deleteWeeklySummary: (summary: WeeklySummary) => void;
+  draft: WeeklyLog;
+  setDraft: Dispatch<SetStateAction<WeeklyLog>>;
+  saveWeeklyLog: (event: FormEvent<HTMLFormElement>) => void;
+  deleteWeeklyLog: (log: WeeklyLog) => void;
+  generateDraft: () => void;
 }) {
-  const weekTasks = tasks.filter((task) => task.updatedAt.slice(0, 10) >= summary.weekStart && task.updatedAt.slice(0, 10) <= summary.weekEnd);
-  const weekNotes = notes.filter((note) => note.updatedAt.slice(0, 10) >= summary.weekStart && note.updatedAt.slice(0, 10) <= summary.weekEnd);
-
   return (
     <section className="stack">
-      <div className="panel rowPanel">
-        <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
-        <button type="button" onClick={() => saveWeeklySummary(summary)}>Save week log</button>
-      </div>
-      <section className="summary weeklyCards">
-        <div className="weeklyCard green">
-          <div className="weeklyIcon">✅</div>
-          <strong>{summary.taskStats.completed}</strong>
-          <span>Completed</span>
+      <form className="panel" onSubmit={saveWeeklyLog}>
+        <div className="rowPanel">
+          <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
+          <button type="button" onClick={generateDraft}>Generate Weekly Review Draft</button>
         </div>
-        <div className="weeklyCard amber">
-          <div className="weeklyIcon">🛠️</div>
-          <strong>{summary.taskStats.inProgress}</strong>
-          <span>In progress</span>
-        </div>
-        <div className="weeklyCard red">
-          <div className="weeklyIcon">⏰</div>
-          <strong>{summary.taskStats.incomplete}</strong>
-          <span>Incomplete</span>
-        </div>
-        <div className="weeklyCard blue">
-          <div className="weeklyIcon">↪</div>
-          <strong>{summary.taskStats.carriedForward}</strong>
-          <span>Carried over</span>
-        </div>
-      </section>
-      <div className="columns">
-        <Panel title="Task details">
-          <TaskList tasks={weekTasks} empty="No task changes recorded in this week." compact />
-        </Panel>
-        <Panel title="Knowledge captured">
-          {weekNotes.length === 0 ? null : weekNotes.map((note) => <p key={note.id}>{note.title}</p>)}
-        </Panel>
-      </div>
-      <Panel title="Saved logs">
-        {saved.length === 0 ? <p className="empty">No saved weekly logs yet.</p> : saved.map((item) => (
-          <article className="miniCard" key={item.id}>
-            <div className="cardHead">
-              <strong>{item.weekStart} to {item.weekEnd}</strong>
-              <button type="button" onClick={() => deleteWeeklySummary(item)}>Delete</button>
-            </div>
-            <p>{item.generatedText}</p>
-            <p className="metaLine">
-              {item.taskStats.completed} completed, {item.taskStats.inProgress} in progress, {item.taskStats.incomplete} incomplete, {item.taskStats.carriedForward} carried over
-            </p>
-            {item.noteHighlights.length > 0 ? (
-              <p className="metaLine">Learning: {item.noteHighlights.join(' · ')}</p>
-            ) : null}
+        <h2>Week of {draft.weekStart}</h2>
+        <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
+        <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
+        <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
+        <WeeklyField label="Problems solved" value={draft.solved} onChange={(value) => setDraft((current) => ({ ...current, solved: value }))} />
+        <WeeklyField label="Impact / contribution" value={draft.impact} onChange={(value) => setDraft((current) => ({ ...current, impact: value }))} />
+        <WeeklyField label="Open questions" value={draft.openQuestions} onChange={(value) => setDraft((current) => ({ ...current, openQuestions: value }))} />
+        <WeeklyField label="Next week priorities" value={draft.nextWeek} onChange={(value) => setDraft((current) => ({ ...current, nextWeek: value }))} />
+        <label>Tags<input value={draft.tags.join(', ')} onChange={(event) => setDraft((current) => ({ ...current, tags: parseTags(event.target.value) }))} placeholder="weekly-review, pipeline" /></label>
+        <button type="submit">Save weekly log</button>
+      </form>
+      <Panel title="Saved weekly logs">
+        {data.weeklyLogs.length === 0 ? <p className="empty">No weekly logs yet.</p> : data.weeklyLogs.map((log) => (
+          <article className="miniCard" key={log.id}>
+            <div className="cardHead"><strong>Week of {log.weekStart}</strong><button type="button" onClick={() => deleteWeeklyLog(log)}>Delete</button></div>
+            <p className="preline">{compactLog(log)}</p>
+            <Meta tags={log.tags} />
           </article>
         ))}
       </Panel>
@@ -686,10 +814,115 @@ function WeeklyPage({ summary, weekDate, setWeekDate, saved, tasks, notes, saveW
   );
 }
 
-function SettingsPage({ data, exportJson, importJson, enableNotifications, settings, updateSettings, clearAllData }: {
+function WeeklyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return <label>{label}<textarea rows={4} value={value} onChange={(event) => onChange(event.target.value)} placeholder="One item per line" /></label>;
+}
+
+function SystemsPage({ systems, addSystem, updateSystem, deleteSystem }: {
+  systems: SystemEntry[];
+  addSystem: (event: FormEvent<HTMLFormElement>) => void;
+  updateSystem: (event: FormEvent<HTMLFormElement>, id: string) => void;
+  deleteSystem: (system: SystemEntry) => void;
+}) {
+  const [showCreate, setShowCreate] = useState(systems.length === 0);
+  return (
+    <section className="stack">
+      <div className="pageActions"><div /><button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new system' : 'Document system'}</button></div>
+      {showCreate ? <SystemForm title="Document system" onSubmit={(event) => { addSystem(event); setShowCreate(false); }} /> : null}
+      <div className="taskList">
+        {systems.length === 0 ? <p className="empty">No systems documented yet.</p> : systems.map((system) => (
+          <article className="card" key={system.id}>
+            <div className="cardHead"><h3>{system.name}</h3><button type="button" onClick={() => deleteSystem(system)}>Delete</button></div>
+            <p>{system.purpose}</p>
+            <Meta tags={system.tags} />
+            <details><summary>Details</summary><SystemDetails system={system} /><SystemForm title="Edit system" system={system} onSubmit={(event) => updateSystem(event, system.id)} /></details>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function TroubleshootingPage({ entries, prefill, addTroubleshooting, updateTroubleshooting, deleteTroubleshooting }: {
+  entries: TroubleshootingEntry[];
+  prefill?: string;
+  addTroubleshooting: (event: FormEvent<HTMLFormElement>) => void;
+  updateTroubleshooting: (event: FormEvent<HTMLFormElement>, id: string) => void;
+  deleteTroubleshooting: (entry: TroubleshootingEntry) => void;
+}) {
+  const [filter, setFilter] = useState('');
+  const visible = filterList(entries, filter, (entry) => [entry.title, entry.symptoms, entry.error, entry.rootCause, entry.solution, entry.relatedSystem, entry.tags.join(' ')]);
+  return (
+    <section className="grid">
+      <TroubleshootingForm title="Add troubleshooting entry" prefill={prefill} onSubmit={addTroubleshooting} />
+      <div>
+        <label className="search">Search troubleshooting<input value={filter} onChange={(event) => setFilter(event.target.value)} placeholder="error, system, root cause..." /></label>
+        <div className="notes">
+          {visible.map((entry) => (
+            <article className="card" key={entry.id}>
+              <div className="cardHead"><h3>{entry.title}</h3><button type="button" onClick={() => deleteTroubleshooting(entry)}>Delete</button></div>
+              <p className="preline">{entry.solution || entry.symptoms}</p>
+              <Meta tags={entry.tags} />
+              <details><summary>Edit</summary><TroubleshootingForm title="Edit troubleshooting entry" entry={entry} onSubmit={(event) => updateTroubleshooting(event, entry.id)} /></details>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, deleteQuestion }: {
+  questions: QuestionEntry[];
+  prefill?: string;
+  addQuestion: (event: FormEvent<HTMLFormElement>) => void;
+  updateQuestion: (event: FormEvent<HTMLFormElement>, id: string) => void;
+  deleteQuestion: (question: QuestionEntry) => void;
+}) {
+  return (
+    <section className="grid">
+      <QuestionForm title="Quick question" prefill={prefill} onSubmit={addQuestion} />
+      <div className="notes">
+        {questions.length === 0 ? <p className="empty">No questions yet.</p> : questions.map((question) => (
+          <article className="card" key={question.id}>
+            <div className="cardHead"><h3>{question.question}</h3><button type="button" onClick={() => deleteQuestion(question)}>Delete</button></div>
+            <p><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span> {question.relatedSystem}</p>
+            <p className="preline">{question.notes}</p>
+            <details><summary>Edit</summary><QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} /></details>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SearchPage({ data, query, setQuery }: { data: DayBookData; query: string; setQuery: (value: string) => void }) {
+  const results = useMemo(() => searchData(data, query), [data, query]);
+  return (
+    <section className="stack">
+      <Panel title="Global search">
+        <label className="search">Search<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="pipeline, SQL error, system owner..." autoFocus /></label>
+      </Panel>
+      <div className="notes">
+        {results.length === 0 ? <p className="empty">No matching records.</p> : results.map((result) => (
+          <article className="card" key={`${result.type}-${result.id}`}>
+            <p className="eyebrow">{result.type}</p>
+            <h3>{result.title}</h3>
+            <p>{result.detail}</p>
+            <Meta tags={result.tags} />
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupStatus, enableNotifications, settings, updateSettings, clearAllData }: {
   data: DayBookData;
   exportJson: () => void;
   importJson: (file: File | undefined) => void;
+  chooseBackupFile: () => Promise<void>;
+  backupStatus: string;
   enableNotifications: () => Promise<void>;
   settings: AppSettings;
   updateSettings: (settings: AppSettings) => void;
@@ -697,31 +930,18 @@ function SettingsPage({ data, exportJson, importJson, enableNotifications, setti
 }) {
   return (
     <section className="grid">
-      <Panel title="Notifications">
-        <p>Allow browser notifications for local reminders while DayBook is open.</p>
-        <button type="button" onClick={enableNotifications}>Enable reminders</button>
-      </Panel>
+      <Panel title="Notifications"><p>Allow browser notifications for local reminders while DayBook is open.</p><button type="button" onClick={enableNotifications}>Enable reminders</button></Panel>
       <Panel title="Theme">
         <label>Application theme
           <select value={settings.theme} onChange={(event) => updateSettings({ ...settings, theme: event.target.value as AppSettings['theme'] })}>
-            <option value="mint">Mint</option>
-            <option value="sage">Sage</option>
-            <option value="cream">Cream</option>
+            <option value="mint">Mint</option><option value="sage">Sage</option><option value="cream">Cream</option>
           </select>
         </label>
       </Panel>
-      <Panel title="Export">
-        <p>Download a plain JSON backup for local storage or another device.</p>
-        <button type="button" onClick={exportJson}>Export JSON</button>
-      </Panel>
-      <Panel title="Import">
-        <p>Import replaces the current local DayBook data with the selected JSON file.</p>
-        <input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} />
-      </Panel>
-      <Panel title="Local data">
-        <p>{data.tasks.length} tasks, {data.projects.length} projects, {data.notes.length} notes, {data.weeklySummaries.length} weekly logs.</p>
-        <button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button>
-      </Panel>
+      <Panel title="Export"><p>Download a plain JSON backup for local storage or another device.</p><button type="button" onClick={exportJson}>Export JSON</button></Panel>
+      <Panel title="Auto backup"><p>Choose a JSON file in a Drive-synced folder. DayBook will update it after local data changes while the app is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
+      <Panel title="Import"><p>Import merges the selected DayBook JSON file into the current local data.</p><input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} /></Panel>
+      <Panel title="Local data"><p>{data.tasks.length} tasks, {data.notes.length} notes, {data.weeklyLogs.length} weekly logs, {data.systems.length} systems, {data.troubleshooting.length} troubleshooting entries, {data.questions.length} questions, {data.captures.length} captures.</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
     </section>
   );
 }
@@ -735,52 +955,107 @@ function TaskForm({ title, task, projects, onSubmit, onCancel }: {
 }) {
   return (
     <form className="panel" onSubmit={onSubmit}>
-      {/* Keep task editing fields flat so future task changes stay in one component. */}
       <h2>{title}</h2>
       <label>Title<input name="title" required defaultValue={task?.title} placeholder="Prepare pipeline review" /></label>
-      <label>Status
-        <select name="status" defaultValue={task?.status ?? 'todo'}>
-          <option value="todo">To-do</option>
-          <option value="in-progress">In progress</option>
-          <option value="done">Done</option>
-        </select>
-      </label>
+      <label>Status<select name="status" defaultValue={task?.status ?? 'todo'}><option value="todo">To-do</option><option value="in-progress">In progress</option><option value="done">Done</option></select></label>
       <label>Deadline<input name="dueAt" type="datetime-local" defaultValue={task?.dueAt} /></label>
       <label>Reminder<input name="reminderAt" type="datetime-local" defaultValue={task?.reminderAt} /></label>
-      <label>Project
-        <select name="projectId" defaultValue={task?.projectId ?? ''}>
-          <option value="">No project</option>
-          {projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}
-        </select>
-      </label>
-      <label>Tags<input name="tags" defaultValue={task?.tags.join(', ')} placeholder="Ad hoc, Research, Feature" /></label>
+      <label>Project<select name="projectId" defaultValue={task?.projectId ?? ''}><option value="">No project</option>{projects.map((project) => <option value={project.id} key={project.id}>{project.name}</option>)}</select></label>
+      <label>Tags<input name="tags" defaultValue={task?.tags.join(', ')} placeholder="pipeline, onboarding" /></label>
       <label>Roadblock<input name="roadblock" defaultValue={task?.roadblock} placeholder="Waiting for access" /></label>
       <label>Notes<textarea name="notes" rows={3} defaultValue={task?.notes} placeholder="What needs to happen?" /></label>
-      <div className="formActions">
-        <button type="submit">{task ? 'Save task' : 'Add task'}</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
-      </div>
+      <div className="formActions"><button type="submit">{task ? 'Save task' : 'Add task'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
     </form>
   );
 }
 
-function ProjectForm({ title, project, onSubmit, onCancel }: {
-  title: string;
-  project?: Project;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onCancel: () => void;
-}) {
+function ProjectForm({ title, project, onSubmit, onCancel }: { title: string; project?: Project; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>{title}</h2>
       <label>Name<input name="name" required defaultValue={project?.name} placeholder="Warehouse cost review" /></label>
       <label>Overview<textarea name="overview" rows={3} defaultValue={project?.overview} /></label>
       <label>Project details<textarea name="details" rows={4} defaultValue={project?.details} /></label>
-      <label>Project stages<textarea name="timeline" rows={4} defaultValue={project?.timeline} placeholder="Stage 1 | 2026-08-13 | Gather requirements" /></label>
-      <div className="formActions">
-        <button type="submit">{project ? 'Save project' : 'Create project'}</button>
-        <button type="button" onClick={onCancel}>Cancel</button>
-      </div>
+      <label>Project stages<textarea name="timeline" rows={4} defaultValue={project?.timeline} placeholder="Stage 1 | 2026-09-01 | Gather requirements" /></label>
+      <label>Tags<input name="tags" defaultValue={project?.tags.join(', ')} placeholder="process, system" /></label>
+      <div className="formActions"><button type="submit">{project ? 'Save project' : 'Create project'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
+    </form>
+  );
+}
+
+function SystemForm({ title, system, onSubmit }: { title: string; system?: SystemEntry; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="panel" onSubmit={onSubmit}>
+      <h2>{title}</h2>
+      <label>Name<input name="name" required defaultValue={system?.name} /></label>
+      <label>Purpose<textarea name="purpose" rows={3} defaultValue={system?.purpose} /></label>
+      <label>Owner / team<input name="owner" defaultValue={system?.owner} /></label>
+      <label>Users<input name="users" defaultValue={system?.users} /></label>
+      <label>Inputs<textarea name="inputs" rows={3} defaultValue={system?.inputs} /></label>
+      <label>Outputs<textarea name="outputs" rows={3} defaultValue={system?.outputs} /></label>
+      <label>Workflow / data flow<textarea name="workflow" rows={5} defaultValue={system?.workflow} /></label>
+      <label>Repositories<textarea name="repositories" rows={2} defaultValue={system?.repositories} /></label>
+      <label>Databases<textarea name="databases" rows={2} defaultValue={system?.databases} /></label>
+      <label>Infrastructure<textarea name="infrastructure" rows={2} defaultValue={system?.infrastructure} /></label>
+      <label>Dependencies<textarea name="dependencies" rows={2} defaultValue={system?.dependencies} /></label>
+      <label>Common failures<textarea name="commonFailures" rows={3} defaultValue={system?.commonFailures} /></label>
+      <label>Debugging notes<textarea name="debuggingNotes" rows={3} defaultValue={system?.debuggingNotes} /></label>
+      <label>Related knowledge notes<textarea name="relatedKnowledge" rows={2} defaultValue={system?.relatedKnowledge} /></label>
+      <label>Related troubleshooting entries<textarea name="relatedTroubleshooting" rows={2} defaultValue={system?.relatedTroubleshooting} /></label>
+      <label>Tags<input name="tags" defaultValue={system?.tags.join(', ')} placeholder="pipeline, database" /></label>
+      <button type="submit">{system ? 'Save system' : 'Create system'}</button>
+    </form>
+  );
+}
+
+function SystemDetails({ system }: { system: SystemEntry }) {
+  return <p className="preline">{[
+    ['Owner / team', system.owner],
+    ['Users', system.users],
+    ['Inputs', system.inputs],
+    ['Outputs', system.outputs],
+    ['Workflow / data flow', system.workflow],
+    ['Repositories', system.repositories],
+    ['Databases', system.databases],
+    ['Infrastructure', system.infrastructure],
+    ['Dependencies', system.dependencies],
+    ['Common failures', system.commonFailures],
+    ['Debugging notes', system.debuggingNotes],
+    ['Related knowledge notes', system.relatedKnowledge],
+    ['Related troubleshooting entries', system.relatedTroubleshooting]
+  ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join('\n\n')}</p>;
+}
+
+function TroubleshootingForm({ title, entry, prefill, onSubmit }: { title: string; entry?: TroubleshootingEntry; prefill?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="panel" onSubmit={onSubmit} key={prefill ?? entry?.id ?? 'troubleshooting'}>
+      <h2>{title}</h2>
+      <label>Title / problem<input name="title" required defaultValue={entry?.title ?? prefill} /></label>
+      <label>Symptoms<textarea name="symptoms" rows={3} defaultValue={entry?.symptoms} /></label>
+      <label>Error message or observed behaviour<textarea name="error" rows={3} defaultValue={entry?.error} /></label>
+      <label>Initial hypothesis<textarea name="hypothesis" rows={2} defaultValue={entry?.hypothesis} /></label>
+      <label>Investigation steps<textarea name="investigation" rows={4} defaultValue={entry?.investigation} /></label>
+      <label>Root cause<textarea name="rootCause" rows={3} defaultValue={entry?.rootCause} /></label>
+      <label>Solution<textarea name="solution" rows={3} defaultValue={entry?.solution} /></label>
+      <label>Prevention / future improvement<textarea name="prevention" rows={3} defaultValue={entry?.prevention} /></label>
+      <label>Related system<input name="relatedSystem" defaultValue={entry?.relatedSystem} /></label>
+      <label>Tags<input name="tags" defaultValue={entry?.tags.join(', ')} placeholder="debugging, pipeline" /></label>
+      <label>Date resolved<input name="dateResolved" type="date" defaultValue={entry?.dateResolved} /></label>
+      <button type="submit">{entry ? 'Save entry' : 'Create entry'}</button>
+    </form>
+  );
+}
+
+function QuestionForm({ title, question, prefill, onSubmit }: { title: string; question?: QuestionEntry; prefill?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="panel" onSubmit={onSubmit} key={prefill ?? question?.id ?? 'question'}>
+      <h2>{title}</h2>
+      <label>Question<input name="question" required defaultValue={question?.question ?? prefill} placeholder="Who owns this table?" /></label>
+      <label>Status<select name="status" defaultValue={question?.status ?? 'Open'}><option>Open</option><option>Investigating</option><option>Need to ask</option><option>Answered</option></select></label>
+      <label>Related system<input name="relatedSystem" defaultValue={question?.relatedSystem} /></label>
+      <label>Related knowledge note<input name="relatedKnowledge" defaultValue={question?.relatedKnowledge} /></label>
+      <label>Notes / answer<textarea name="notes" rows={5} defaultValue={question?.notes} /></label>
+      <button type="submit">{question ? 'Save question' : 'Create question'}</button>
     </form>
   );
 }
@@ -791,7 +1066,6 @@ function ProjectTimeline({ timeline }: { timeline: string }) {
     return { name, due, detail };
   });
   if (phases.length === 0) return <p>No planned timeline yet.</p>;
-
   return (
     <div className="timeline">
       {phases.map((phase, index) => (
@@ -817,34 +1091,44 @@ function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, co
   setExpandedMap?: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
   if (tasks.length === 0) return <p className="empty">{empty}</p>;
-
   return (
     <div className="taskList">
       {tasks.map((task) => (
         <article className={`card ${task.status === 'done' ? 'done' : ''}`} key={task.id}>
           <div className="cardHead">
-            <label className="check">
-              {onToggle && <input type="checkbox" checked={task.status === 'done'} onChange={() => onToggle(task)} />}
-              <span>{task.title}</span>
-            </label>
+            <label className="check">{onToggle && <input type="checkbox" checked={task.status === 'done'} onChange={() => onToggle(task)} />}<span>{task.title}</span></label>
             <div className="cardActions">
-              {setExpandedMap && (
-                <button type="button" onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>
-                  {(expandedMap?.[task.id] ?? false) ? 'Hide' : 'Details'}
-                </button>
-              )}
-              {onDelete && <button type="button" onClick={() => onDelete(task)} aria-label={`Delete ${task.title}`}>Delete</button>}
+              {setExpandedMap && <button type="button" onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>{(expandedMap?.[task.id] ?? false) ? 'Hide' : 'Details'}</button>}
+              {onDelete && <button type="button" onClick={() => onDelete(task)}>Delete</button>}
             </div>
           </div>
           <div className="compactStack">
-            <p><StatusBadge status={task.status} /> {task.dueAt && <span className="due">Due {new Date(task.dueAt).toLocaleString()}</span>}</p>
+            <p><StatusBadge status={task.status} /> {task.dueAt && <span className="due">Due {new Date(task.dueAt).toLocaleString()}</span>} {task.projectId && projectsById?.get(task.projectId) ? <span className="due"> · {projectsById.get(task.projectId)?.name}</span> : null}</p>
             <Meta tags={task.tags} />
           </div>
-          {(expandedMap?.[task.id] ?? false) && (
-            <div className="editSection">
-              {onUpdate ? <TaskForm title="Edit task" task={task} projects={[...(projectsById?.values() ?? [])]} onSubmit={(event) => onUpdate(event, task.id)} onCancel={() => setExpandedMap?.((current) => ({ ...current, [task.id]: false }))} /> : null}
-            </div>
-          )}
+          {!compact && (expandedMap?.[task.id] ?? false) && onUpdate ? <div className="editSection"><TaskForm title="Edit task" task={task} projects={[...(projectsById?.values() ?? [])]} onSubmit={(event) => onUpdate(event, task.id)} onCancel={() => setExpandedMap?.((current) => ({ ...current, [task.id]: false }))} /></div> : null}
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CaptureList({ captures, convertCapture, deleteCapture }: { captures: QuickCapture[]; convertCapture: (capture: QuickCapture, target: PrefillTarget) => void; deleteCapture: (capture: QuickCapture) => void }) {
+  if (captures.length === 0) return <p className="empty">No quick captures yet.</p>;
+  return (
+    <div className="captureList">
+      {captures.map((capture) => (
+        <article className="miniCard" key={capture.id}>
+          <p className="preline">{capture.text}</p>
+          <time>{formatActivityTime(capture.createdAt)}</time>
+          <Meta tags={capture.tags} />
+          <div className="cardActions">
+            <button type="button" onClick={() => convertCapture(capture, 'knowledge')}>Knowledge</button>
+            <button type="button" onClick={() => convertCapture(capture, 'questions')}>Question</button>
+            <button type="button" onClick={() => convertCapture(capture, 'troubleshooting')}>Troubleshooting</button>
+            <button type="button" onClick={() => convertCapture(capture, 'weekly')}>Weekly log</button>
+            <button type="button" onClick={() => deleteCapture(capture)}>Delete</button>
+          </div>
         </article>
       ))}
     </div>
@@ -856,12 +1140,7 @@ function ActivityList({ activities, expanded, onToggleExpanded }: { activities: 
   return (
     <>
       <ol className="activity">
-        {(expanded ? activities : activities.slice(0, 3)).map((activity) => (
-          <li key={activity.id}>
-            <span>{activity.message}</span>
-            <time>{formatActivityTime(activity.createdAt)}</time>
-          </li>
-        ))}
+        {(expanded ? activities : activities.slice(0, 3)).map((activity) => <li key={activity.id}><span>{activity.message}</span><time>{formatActivityTime(activity.createdAt)}</time></li>)}
       </ol>
       {activities.length > 3 ? <button type="button" onClick={onToggleExpanded}>{expanded ? 'Show less' : 'Show more'}</button> : null}
     </>
@@ -869,21 +1148,12 @@ function ActivityList({ activities, expanded, onToggleExpanded }: { activities: 
 }
 
 function Panel({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="panel">
-      <h2>{title}</h2>
-      {children}
-    </section>
-  );
+  return <section className="panel"><h2>{title}</h2>{children}</section>;
 }
 
 function Meta({ tags }: { tags: string[] }) {
   if (tags.length === 0) return null;
-  return (
-    <p className="meta">
-      {tags.map((tag) => <span key={tag}>#{tag}</span>)}
-    </p>
-  );
+  return <p className="meta">{tags.map((tag) => <span key={tag}>#{tag}</span>)}</p>;
 }
 
 function StatusBadge({ status }: { status: TaskStatus }) {
@@ -899,13 +1169,58 @@ function formatActivityTime(createdAt: string) {
   return `[${day} ${month} ${hours}:${minutes}]`;
 }
 
+function systemFromForm(form: FormData, now: string): Omit<SystemEntry, 'id'> {
+  return {
+    name: String(form.get('name') || '').trim(),
+    purpose: String(form.get('purpose') || '').trim(),
+    owner: String(form.get('owner') || '').trim(),
+    users: String(form.get('users') || '').trim(),
+    inputs: String(form.get('inputs') || '').trim(),
+    outputs: String(form.get('outputs') || '').trim(),
+    workflow: String(form.get('workflow') || '').trim(),
+    repositories: String(form.get('repositories') || '').trim(),
+    databases: String(form.get('databases') || '').trim(),
+    infrastructure: String(form.get('infrastructure') || '').trim(),
+    dependencies: String(form.get('dependencies') || '').trim(),
+    commonFailures: String(form.get('commonFailures') || '').trim(),
+    debuggingNotes: String(form.get('debuggingNotes') || '').trim(),
+    relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
+    relatedTroubleshooting: String(form.get('relatedTroubleshooting') || '').trim(),
+    tags: parseTags(String(form.get('tags') || '')),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function troubleshootingFromForm(form: FormData, now: string): Omit<TroubleshootingEntry, 'id'> {
+  return {
+    title: String(form.get('title') || '').trim(),
+    symptoms: String(form.get('symptoms') || '').trim(),
+    error: String(form.get('error') || '').trim(),
+    hypothesis: String(form.get('hypothesis') || '').trim(),
+    investigation: String(form.get('investigation') || '').trim(),
+    rootCause: String(form.get('rootCause') || '').trim(),
+    solution: String(form.get('solution') || '').trim(),
+    prevention: String(form.get('prevention') || '').trim(),
+    relatedSystem: String(form.get('relatedSystem') || '').trim(),
+    tags: parseTags(String(form.get('tags') || '')),
+    dateResolved: String(form.get('dateResolved') || ''),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
 function mergeImportedData(current: DayBookData, imported: Partial<DayBookData>): DayBookData {
   return {
     tasks: mergeById(current.tasks, imported.tasks),
     notes: mergeById(current.notes, imported.notes),
     projects: mergeById(current.projects, imported.projects),
     activities: [...(imported.activities ?? []), ...current.activities].slice(0, 30),
-    weeklySummaries: mergeById(current.weeklySummaries, imported.weeklySummaries),
+    weeklyLogs: mergeById(current.weeklyLogs, imported.weeklyLogs),
+    systems: mergeById(current.systems, imported.systems),
+    troubleshooting: mergeById(current.troubleshooting, imported.troubleshooting),
+    questions: mergeById(current.questions, imported.questions),
+    captures: mergeById(current.captures, imported.captures),
     settings: imported.settings ? { theme: imported.settings.theme ?? current.settings.theme } : current.settings
   };
 }
@@ -916,17 +1231,9 @@ function mergeById<T extends { id: string }>(existing: T[], incoming?: T[]) {
   return [...map.values()];
 }
 
-function getProjectDueDate(timeline: string) {
-  const dates = timeline.split('\n')
-    .map((line) => line.split('|')[1]?.trim())
-    .filter((value): value is string => Boolean(value));
-  return dates[0] ?? '';
-}
-
 function notifyDueTasks(tasks: Task[], notified: Set<string>, flashMessage: (value: string) => void) {
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const now = Date.now();
-
   tasks
     .filter((task) => task.status !== 'done' && task.reminderAt && !notified.has(task.id))
     .filter((task) => new Date(task.reminderAt).getTime() <= now)
@@ -935,4 +1242,65 @@ function notifyDueTasks(tasks: Task[], notified: Set<string>, flashMessage: (val
       new Notification('DayBook reminder', { body: task.title });
       flashMessage(`Reminder sent: ${task.title}`);
     });
+}
+
+function notifyMissingWeeklyLog(weeklyLogs: WeeklyLog[], notified: Set<string>, flashMessage: (value: string) => void) {
+  const weekStart = weeklyLogReminderWeek(weeklyLogs, new Date(), notified);
+  if (!weekStart) return;
+  notified.add(weekStart);
+  const message = `No weekly log saved for week of ${weekStart}.`;
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('DayBook weekly log', { body: message });
+  }
+  flashMessage(message);
+}
+
+async function writeBackup(handle: BackupFileHandle, data: DayBookData, setBackupStatus: (value: string) => void) {
+  try {
+    if (handle.queryPermission && await handle.queryPermission({ mode: 'readwrite' }) !== 'granted') {
+      setBackupStatus('Auto backup needs file permission again. Choose the backup file in Settings.');
+      return;
+    }
+    const writable = await handle.createWritable();
+    await writable.write(backupBlob(data));
+    await writable.close();
+    setBackupStatus(`Auto backup saved at ${new Date().toLocaleTimeString()}.`);
+  } catch {
+    setBackupStatus('Auto backup failed. Use Export JSON, then choose the backup file again.');
+  }
+}
+
+function filterList<T>(items: T[], query: string, text: (item: T) => string[]) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return items;
+  return items.filter((item) => text(item).join(' ').toLowerCase().includes(needle));
+}
+
+function searchData(data: DayBookData, query: string) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  const matches = (values: string[]) => values.join(' ').toLowerCase().includes(needle);
+  return [
+    ...data.notes.filter((note) => matches([note.title, note.body, note.tags.join(' ')])).map((note) => ({ type: 'Knowledge', id: note.id, title: note.title, detail: note.body.slice(0, 160), tags: note.tags })),
+    ...data.weeklyLogs.filter((log) => matches([log.weekStart, log.learned, log.workedOn, log.blockers, log.solved, log.impact, log.openQuestions, log.nextWeek, log.tags.join(' ')])).map((log) => ({ type: 'Weekly Log', id: log.id, title: `Week of ${log.weekStart}`, detail: compactLog(log).slice(0, 160), tags: log.tags })),
+    ...data.systems.filter((system) => matches([system.name, system.purpose, system.workflow, system.databases, system.relatedKnowledge, system.relatedTroubleshooting, system.tags.join(' ')])).map((system) => ({ type: 'System', id: system.id, title: system.name, detail: system.purpose, tags: system.tags })),
+    ...data.troubleshooting.filter((entry) => matches([entry.title, entry.symptoms, entry.error, entry.rootCause, entry.solution, entry.relatedSystem, entry.tags.join(' ')])).map((entry) => ({ type: 'Troubleshooting', id: entry.id, title: entry.title, detail: entry.solution || entry.rootCause || entry.symptoms, tags: entry.tags })),
+    ...data.questions.filter((question) => matches([question.question, question.status, question.relatedSystem, question.relatedKnowledge, question.notes])).map((question) => ({ type: 'Question', id: question.id, title: question.question, detail: question.notes || question.status, tags: [] })),
+    ...data.captures.filter((capture) => matches([capture.text, capture.tags.join(' ')])).map((capture) => ({ type: 'Quick Capture', id: capture.id, title: capture.text.slice(0, 80), detail: formatActivityTime(capture.createdAt), tags: capture.tags }))
+  ];
+}
+
+function compactLog(log: WeeklyLog) {
+  return [
+    ['Learned', log.learned],
+    ['Worked on', log.workedOn],
+    ['Solved', log.solved],
+    ['Impact', log.impact],
+    ['Open questions', log.openQuestions],
+    ['Next week', log.nextWeek]
+  ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join('\n\n');
+}
+
+function joinLines(existing: string, next: string) {
+  return [existing, next].filter(Boolean).join('\n');
 }

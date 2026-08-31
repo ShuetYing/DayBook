@@ -1,4 +1,5 @@
 export type TaskStatus = 'todo' | 'in-progress' | 'done';
+export type QuestionStatus = 'Open' | 'Investigating' | 'Need to ask' | 'Answered';
 
 export type Task = {
   id: string;
@@ -25,19 +26,77 @@ export type Note = {
   updatedAt: string;
 };
 
-export type WeeklySummary = {
+export type WeeklyLog = {
   id: string;
   weekStart: string;
-  weekEnd: string;
-  generatedText: string;
-  taskStats: {
-    completed: number;
-    incomplete: number;
-    inProgress: number;
-    carriedForward: number;
-  };
-  noteHighlights: string[];
+  learned: string;
+  workedOn: string;
+  blockers: string;
+  solved: string;
+  impact: string;
+  openQuestions: string;
+  nextWeek: string;
+  tags: string[];
   createdAt: string;
+  updatedAt: string;
+};
+
+export type SystemEntry = {
+  id: string;
+  name: string;
+  purpose: string;
+  owner: string;
+  users: string;
+  inputs: string;
+  outputs: string;
+  workflow: string;
+  repositories: string;
+  databases: string;
+  infrastructure: string;
+  dependencies: string;
+  commonFailures: string;
+  debuggingNotes: string;
+  relatedKnowledge: string;
+  relatedTroubleshooting: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TroubleshootingEntry = {
+  id: string;
+  title: string;
+  symptoms: string;
+  error: string;
+  hypothesis: string;
+  investigation: string;
+  rootCause: string;
+  solution: string;
+  prevention: string;
+  relatedSystem: string;
+  tags: string[];
+  dateResolved: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuestionEntry = {
+  id: string;
+  question: string;
+  status: QuestionStatus;
+  relatedSystem: string;
+  relatedKnowledge: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type QuickCapture = {
+  id: string;
+  text: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AppSettings = {
@@ -68,6 +127,10 @@ export type DayBookData = {
   notes: Note[];
   projects: Project[];
   activities: Activity[];
-  weeklySummaries: WeeklySummary[];
+  weeklyLogs: WeeklyLog[];
+  systems: SystemEntry[];
+  troubleshooting: TroubleshootingEntry[];
+  questions: QuestionEntry[];
+  captures: QuickCapture[];
   settings: AppSettings;
 };

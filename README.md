@@ -4,12 +4,13 @@ DayBook is a local-first personal productivity and learning app for one user. It
 
 ## Features
 
-- Dashboard with task overview, weekly counts, and latest activity
+- Dashboard with quick capture, current-week review entry point, task overview, and latest activity
 - Tasks with status, deadlines, reminders, roadblocks, tags, and project linking
 - Projects with overview, linked subtasks, and timeline notes
-- Knowledge notes with a standard template, tags, and search
-- Weekly summaries for completed, incomplete, in-progress, and carried-over work
-- JSON export/import for local backup or moving data between devices
+- Knowledge notes with a reusable work-learning template, tags, and search
+- Weekly logs for learned items, work completed, blockers, solved problems, impact, questions, and next-week priorities
+- Systems, troubleshooting, questions, quick captures, and global search for local work knowledge
+- JSON export/import and browser-native auto backup to a user-selected file
 
 ## Requirements
 
@@ -62,7 +63,7 @@ Most app changes live in these places:
 - `src/styles.css` for visual styling
 - `src/types.ts` for data shapes
 - `src/storage.ts` for local IndexedDB persistence
-- `src/summary.ts` for weekly summary logic
+- `src/summary.ts` for weekly log date handling and local review draft logic
 
 Typical workflow:
 
@@ -150,6 +151,10 @@ For another device on the same network, restart the dev server after changes so 
 DayBook stores data locally in the browser with IndexedDB. There is no hosted backend, account, or cloud sync.
 
 Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to merge another DayBook export into the current local data.
+
+Use `Settings > Choose backup file` to auto-save the full DayBook JSON backup after data changes. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
+
+Auto backup depends on browser file picker support. If your browser does not support it, use manual JSON export.
 
 ## Reminders
 
