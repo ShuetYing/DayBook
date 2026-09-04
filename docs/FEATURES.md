@@ -211,7 +211,6 @@ Each question contains:
 - Question
 - Status
 - Related system
-- Related knowledge note
 - Notes / answer
 - Date created
 

@@ -406,7 +406,7 @@ export default function App() {
         question,
         status: String(form.get('status') || 'Open') as QuestionStatus,
         relatedSystem: String(form.get('relatedSystem') || '').trim(),
-        relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
+        relatedKnowledge: '',
         notes: String(form.get('notes') || '').trim(),
         createdAt: now,
         updatedAt: now
@@ -430,7 +430,7 @@ export default function App() {
         question,
         status: String(form.get('status') || 'Open') as QuestionStatus,
         relatedSystem: String(form.get('relatedSystem') || '').trim(),
-        relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
+        relatedKnowledge: '',
         notes: String(form.get('notes') || '').trim(),
         updatedAt: now
       } : item),
@@ -678,14 +678,31 @@ function TasksPage({ data, addTask, updateTask, toggleTask, deleteTask, expanded
 }) {
   const projectsById = new Map(data.projects.map((project) => [project.id, project]));
   const [showCreate, setShowCreate] = useState(data.tasks.length === 0);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [completedMonth, setCompletedMonth] = useState('');
   const open = data.tasks.filter((task) => task.status !== 'done');
   const done = data.tasks.filter((task) => task.status === 'done');
+  const completedMonths = listTaskMonths(done);
+  const visibleDone = completedMonth ? done.filter((task) => taskMonth(task) === completedMonth) : done;
   return (
     <section className="stack">
       <div className="pageActions"><div /><button type="button" onClick={() => setShowCreate((value) => !value)}>{showCreate ? 'Hide new task' : 'Create new task'}</button></div>
       {showCreate ? <TaskForm title="Add task" onSubmit={(event) => { addTask(event); setShowCreate(false); }} projects={data.projects} onCancel={() => setShowCreate(false)} /> : null}
       <Panel title="Open tasks"><TaskList tasks={open} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No open tasks." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} /></Panel>
-      <Panel title="Completed tasks"><TaskList tasks={done} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No completed tasks yet." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} /></Panel>
+      <Panel title="Completed tasks">
+        <div className="sectionToggle">
+          <button type="button" onClick={() => setShowCompleted((value) => !value)}>{showCompleted ? 'Collapse completed tasks' : 'Expand completed tasks'}</button>
+          {showCompleted && completedMonths.length > 0 ? (
+            <label className="inlineField">Month
+              <select value={completedMonth} onChange={(event) => setCompletedMonth(event.target.value)}>
+                <option value="">All months</option>
+                {completedMonths.map((month) => <option key={month} value={month}>{formatMonthLabel(month)}</option>)}
+              </select>
+            </label>
+          ) : null}
+        </div>
+        {showCompleted ? <TaskList tasks={visibleDone} projectsById={projectsById} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No completed tasks yet." expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} /> : <p className="empty">Completed tasks are hidden until you expand them.</p>}
+      </Panel>
     </section>
   );
 }
@@ -879,11 +896,16 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
   updateQuestion: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteQuestion: (question: QuestionEntry) => void;
 }) {
+  const [query, setQuery] = useState('');
+  const visibleQuestions = filterList(questions, query, (question) => [question.question, question.status, question.relatedSystem, question.notes]);
   return (
     <section className="grid">
       <QuestionForm title="Quick question" prefill={prefill} onSubmit={addQuestion} />
       <div className="notes">
-        {questions.length === 0 ? <p className="empty">No questions yet.</p> : questions.map((question) => (
+        <Panel title="Search questions">
+          <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
+        </Panel>
+        {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
           <article className="card" key={question.id}>
             <div className="cardHead"><h3>{question.question}</h3><button type="button" onClick={() => deleteQuestion(question)}>Delete</button></div>
             <p><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span> {question.relatedSystem}</p>
@@ -1053,7 +1075,6 @@ function QuestionForm({ title, question, prefill, onSubmit }: { title: string; q
       <label>Question<input name="question" required defaultValue={question?.question ?? prefill} placeholder="Who owns this table?" /></label>
       <label>Status<select name="status" defaultValue={question?.status ?? 'Open'}><option>Open</option><option>Investigating</option><option>Need to ask</option><option>Answered</option></select></label>
       <label>Related system<input name="relatedSystem" defaultValue={question?.relatedSystem} /></label>
-      <label>Related knowledge note<input name="relatedKnowledge" defaultValue={question?.relatedKnowledge} /></label>
       <label>Notes / answer<textarea name="notes" rows={5} defaultValue={question?.notes} /></label>
       <button type="submit">{question ? 'Save question' : 'Create question'}</button>
     </form>
@@ -1285,9 +1306,22 @@ function searchData(data: DayBookData, query: string) {
     ...data.weeklyLogs.filter((log) => matches([log.weekStart, log.learned, log.workedOn, log.blockers, log.solved, log.impact, log.openQuestions, log.nextWeek, log.tags.join(' ')])).map((log) => ({ type: 'Weekly Log', id: log.id, title: `Week of ${log.weekStart}`, detail: compactLog(log).slice(0, 160), tags: log.tags })),
     ...data.systems.filter((system) => matches([system.name, system.purpose, system.workflow, system.databases, system.relatedKnowledge, system.relatedTroubleshooting, system.tags.join(' ')])).map((system) => ({ type: 'System', id: system.id, title: system.name, detail: system.purpose, tags: system.tags })),
     ...data.troubleshooting.filter((entry) => matches([entry.title, entry.symptoms, entry.error, entry.rootCause, entry.solution, entry.relatedSystem, entry.tags.join(' ')])).map((entry) => ({ type: 'Troubleshooting', id: entry.id, title: entry.title, detail: entry.solution || entry.rootCause || entry.symptoms, tags: entry.tags })),
-    ...data.questions.filter((question) => matches([question.question, question.status, question.relatedSystem, question.relatedKnowledge, question.notes])).map((question) => ({ type: 'Question', id: question.id, title: question.question, detail: question.notes || question.status, tags: [] })),
+    ...data.questions.filter((question) => matches([question.question, question.status, question.relatedSystem, question.notes])).map((question) => ({ type: 'Question', id: question.id, title: question.question, detail: question.notes || question.status, tags: [] })),
     ...data.captures.filter((capture) => matches([capture.text, capture.tags.join(' ')])).map((capture) => ({ type: 'Quick Capture', id: capture.id, title: capture.text.slice(0, 80), detail: formatActivityTime(capture.createdAt), tags: capture.tags }))
   ];
+}
+
+export function taskMonth(task: Task) {
+  return task.updatedAt.slice(0, 7);
+}
+
+export function listTaskMonths(tasks: Task[]) {
+  return [...new Set(tasks.map(taskMonth).filter(Boolean))].sort((left, right) => right.localeCompare(left));
+}
+
+function formatMonthLabel(value: string) {
+  const [year, month] = value.split('-');
+  return new Date(Number(year), Number(month) - 1, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 }
 
 function compactLog(log: WeeklyLog) {

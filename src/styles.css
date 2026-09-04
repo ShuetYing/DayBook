@@ -326,6 +326,24 @@ h3 {
   align-items: start;
 }
 
+.dashboardGrid {
+  grid-template-areas:
+    "capture overview"
+    "capture activity";
+}
+
+.dashboardGrid > :nth-child(1) {
+  grid-area: capture;
+}
+
+.dashboardGrid > :nth-child(2) {
+  grid-area: overview;
+}
+
+.dashboardGrid > :nth-child(3) {
+  grid-area: activity;
+}
+
 .stack {
   grid-template-columns: 1fr;
 }
@@ -581,6 +599,21 @@ button:focus-visible {
   flex-wrap: wrap;
 }
 
+.sectionToggle {
+  display: flex;
+  gap: 12px;
+  align-items: end;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.inlineField {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  font-weight: 750;
+}
+
 .compactStack {
   display: grid;
   gap: 6px;
@@ -657,6 +690,13 @@ summary {
   .rowPanel {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .dashboardGrid {
+    grid-template-areas:
+      "capture"
+      "overview"
+      "activity";
   }
 
   .pageActions,
