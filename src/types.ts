@@ -99,8 +99,18 @@ export type QuickCapture = {
   updatedAt: string;
 };
 
+export type GlossaryEntry = {
+  id: string;
+  term: string;
+  meaning: string;
+  context: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AppSettings = {
-  theme: 'mint' | 'sage' | 'cream';
+  theme: 'mint' | 'sage' | 'cream' | 'sky' | 'rose' | 'graphite';
+  density: 'comfortable' | 'compact';
 };
 
 export type Project = {
@@ -132,5 +142,6 @@ export type DayBookData = {
   troubleshooting: TroubleshootingEntry[];
   questions: QuestionEntry[];
   captures: QuickCapture[];
+  glossary: GlossaryEntry[];
   settings: AppSettings;
 };

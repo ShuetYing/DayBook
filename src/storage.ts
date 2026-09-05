@@ -14,7 +14,8 @@ const EMPTY_DATA: DayBookData = {
   troubleshooting: [],
   questions: [],
   captures: [],
-  settings: { theme: 'mint' }
+  glossary: [],
+  settings: { theme: 'mint', density: 'comfortable' }
 };
 
 export async function loadData(): Promise<DayBookData> {
@@ -29,7 +30,8 @@ export async function loadData(): Promise<DayBookData> {
     troubleshooting: data?.troubleshooting ?? [],
     questions: data?.questions ?? [],
     captures: data?.captures ?? [],
-    settings: data?.settings ?? EMPTY_DATA.settings
+    glossary: data?.glossary ?? [],
+    settings: { ...EMPTY_DATA.settings, ...data?.settings }
   };
 }
 

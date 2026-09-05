@@ -6,6 +6,7 @@ import type {
   Activity,
   AppSettings,
   DayBookData,
+  GlossaryEntry,
   Note,
   Project,
   QuestionEntry,
@@ -18,9 +19,9 @@ import type {
   WeeklyLog
 } from './types';
 
-type Page = 'dashboard' | 'tasks' | 'projects' | 'knowledge' | 'weekly' | 'systems' | 'troubleshooting' | 'questions' | 'search' | 'settings';
+type Page = 'dashboard' | 'tasks' | 'projects' | 'knowledge' | 'glossary' | 'systems' | 'troubleshooting' | 'questions' | 'weekly' | 'search' | 'settings';
 type ProjectTab = 'overview' | 'subtasks' | 'timeline';
-type PrefillTarget = 'knowledge' | 'weekly' | 'troubleshooting' | 'questions';
+type PrefillTarget = 'knowledge' | 'troubleshooting' | 'questions';
 type BackupFileHandle = {
   createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
   queryPermission?: (options?: { mode: 'readwrite' }) => Promise<PermissionState>;
@@ -37,7 +38,8 @@ const emptyData: DayBookData = {
   troubleshooting: [],
   questions: [],
   captures: [],
-  settings: { theme: 'mint' }
+  glossary: [],
+  settings: { theme: 'mint', density: 'comfortable' }
 };
 const standardNoteTemplate = 'Summary / What I learned\n\nContext / Where this is used\n\nDetails\n\nExample / command\n\nRelated systems\n\nTags\n\nOpen questions\n';
 const presetTags = ['pipeline', 'debugging', 'sql', 'python', 'database', 'cloud', 'manufacturing', 'process', 'system', 'troubleshooting'];
@@ -46,10 +48,11 @@ const navItems: { page: Page; label: string }[] = [
   { page: 'tasks', label: 'Tasks' },
   { page: 'projects', label: 'Projects' },
   { page: 'knowledge', label: 'Knowledge Repo' },
-  { page: 'weekly', label: 'Weekly Logs' },
+  { page: 'glossary', label: 'Glossary' },
   { page: 'systems', label: 'Systems' },
   { page: 'troubleshooting', label: 'Troubleshooting' },
   { page: 'questions', label: 'Questions' },
+  { page: 'weekly', label: 'Weekly Logs' },
   { page: 'search', label: 'Search' },
   { page: 'settings', label: 'Settings' }
 ];
@@ -95,8 +98,25 @@ export default function App() {
   }, [backupHandle, data, ready]);
 
   useEffect(() => {
+    if (!ready || !backupHandle) return;
+    let interval = 0;
+    const timer = window.setTimeout(() => {
+      void writeBackup(backupHandle, data, setBackupStatus);
+      interval = window.setInterval(() => void writeBackup(backupHandle, data, setBackupStatus), 86_400_000);
+    }, msUntilNextBackup());
+    return () => {
+      window.clearTimeout(timer);
+      if (interval) window.clearInterval(interval);
+    };
+  }, [backupHandle, data, ready]);
+
+  useEffect(() => {
     document.documentElement.dataset.theme = data.settings.theme;
   }, [data.settings.theme]);
+
+  useEffect(() => {
+    document.documentElement.dataset.density = data.settings.density;
+  }, [data.settings.density]);
 
   useEffect(() => {
     const timer = window.setInterval(() => notifyDueTasks(data.tasks, notified.current, flashMessage), 60_000);
@@ -229,7 +249,7 @@ export default function App() {
         progress: '',
         timeline: String(form.get('timeline') || '').trim(),
         category: '',
-        tags: parseTags(String(form.get('tags') || '')),
+        tags: [],
         createdAt: now,
         updatedAt: now
       }, ...current.projects],
@@ -253,7 +273,7 @@ export default function App() {
         overview: String(form.get('overview') || '').trim(),
         details: String(form.get('details') || '').trim(),
         timeline: String(form.get('timeline') || '').trim(),
-        tags: parseTags(String(form.get('tags') || '')),
+        tags: [],
         updatedAt: now
       } : project),
       activities: withActivity(current, `Updated project: ${name}`, now)
@@ -305,6 +325,28 @@ export default function App() {
     flashMessage(`Knowledge note deleted: ${note.title}`);
   }
 
+  function addGlossary(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const entry = glossaryFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.term || !entry.meaning) return;
+    updateData((current, now) => ({
+      ...current,
+      glossary: [{ ...entry, id: crypto.randomUUID(), createdAt: now, updatedAt: now }, ...current.glossary],
+      activities: withActivity(current, `Added glossary term: ${entry.term}`, now)
+    }));
+    flashMessage(`Glossary term saved: ${entry.term}`);
+    event.currentTarget.reset();
+  }
+
+  function deleteGlossary(entry: GlossaryEntry) {
+    updateData((current, now) => ({
+      ...current,
+      glossary: current.glossary.filter((item) => item.id !== entry.id),
+      activities: withActivity(current, `Deleted glossary term: ${entry.term}`, now)
+    }));
+    flashMessage(`Glossary term deleted: ${entry.term}`);
+  }
+
   function saveWeeklyLog(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     updateData((current, now) => ({
@@ -312,7 +354,6 @@ export default function App() {
       weeklyLogs: [{ ...weeklyDraft, updatedAt: now }, ...current.weeklyLogs.filter((log) => log.id !== weeklyDraft.id)],
       activities: withActivity(current, `Saved weekly log: ${weeklyDraft.weekStart}`, now)
     }));
-    setPrefill((current) => ({ ...current, weekly: '' }));
     flashMessage(`Weekly log saved: ${weeklyDraft.weekStart}`);
   }
 
@@ -472,10 +513,7 @@ export default function App() {
 
   function convertCapture(capture: QuickCapture, target: PrefillTarget) {
     setPrefill((current) => ({ ...current, [target]: capture.text }));
-    if (target === 'weekly') {
-      setWeeklyDraft((current) => ({ ...current, workedOn: joinLines(current.workedOn, capture.text) }));
-    }
-    setPage(target === 'weekly' ? 'weekly' : target);
+    setPage(target);
   }
 
   async function enableNotifications() {
@@ -583,6 +621,7 @@ export default function App() {
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
         {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
         {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} deleteNote={deleteNote} />}
+        {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} deleteGlossary={deleteGlossary} />}
         {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
         {page === 'systems' && <SystemsPage systems={data.systems} addSystem={addSystem} updateSystem={updateSystem} deleteSystem={deleteSystem} />}
         {page === 'troubleshooting' && <TroubleshootingPage entries={data.troubleshooting} prefill={prefill.troubleshooting} addTroubleshooting={addTroubleshooting} updateTroubleshooting={updateTroubleshooting} deleteTroubleshooting={deleteTroubleshooting} />}
@@ -736,12 +775,13 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
                   <button type="button" onClick={() => deleteProject(project)}>Delete</button>
                 </div>
               </div>
-              {!expanded ? <><p>{project.overview || 'No overview yet.'}</p><Meta tags={project.tags} /></> : (
+              <ProjectSummary project={project} tasks={subtasks} showOverview={!expanded} />
+              {!expanded ? null : (
                 <>
                   <div className="tabs">
                     {(['overview', 'subtasks', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item === 'subtasks' ? 'Sub-tasks' : item}</button>)}
                   </div>
-                  {tab === 'overview' && <><p>{project.overview || 'No overview yet.'}</p><p>{project.details || 'No details yet.'}</p><Meta tags={project.tags} /></>}
+                  {tab === 'overview' && <><DetailBlock label="Overview" value={project.overview || 'No overview yet.'} /><DetailBlock label="Details" value={project.details || 'No details yet.'} /></>}
                   {tab === 'subtasks' && <TaskList tasks={subtasks} empty="No tasks linked to this project yet." compact />}
                   {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} />}
                   <details><summary>Edit project</summary><ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [project.id]: false }))} /></details>
@@ -790,6 +830,32 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
   );
 }
 
+function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
+  glossary: GlossaryEntry[];
+  addGlossary: (event: FormEvent<HTMLFormElement>) => void;
+  deleteGlossary: (entry: GlossaryEntry) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const visible = filterList(glossary, query, (entry) => [entry.term, entry.meaning, entry.context]);
+  return (
+    <section className="grid">
+      <GlossaryForm onSubmit={addGlossary} />
+      <div>
+        <label className="search">Search glossary<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="yield, lot, SPC..." /></label>
+        <div className="notes">
+          {visible.length === 0 ? <p className="empty">{glossary.length === 0 ? 'No glossary terms yet.' : 'No matching terms.'}</p> : visible.map((entry) => (
+            <article className="card" key={entry.id}>
+              <div className="cardHead"><h3>{entry.term}</h3><button type="button" onClick={() => deleteGlossary(entry)}>Delete</button></div>
+              <DetailBlock label="Meaning" value={entry.meaning} />
+              {entry.context ? <DetailBlock label="Where it appears" value={entry.context} /> : null}
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeeklyLog, deleteWeeklyLog, generateDraft }: {
   data: DayBookData;
   weekDate: string;
@@ -811,11 +877,8 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
         <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
         <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
         <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
-        <WeeklyField label="Problems solved" value={draft.solved} onChange={(value) => setDraft((current) => ({ ...current, solved: value }))} />
-        <WeeklyField label="Impact / contribution" value={draft.impact} onChange={(value) => setDraft((current) => ({ ...current, impact: value }))} />
-        <WeeklyField label="Open questions" value={draft.openQuestions} onChange={(value) => setDraft((current) => ({ ...current, openQuestions: value }))} />
+        <WeeklyField label="Problems solved / contribution" value={weeklyContribution(draft)} onChange={(value) => setDraft((current) => ({ ...current, solved: '', impact: value }))} />
         <WeeklyField label="Next week priorities" value={draft.nextWeek} onChange={(value) => setDraft((current) => ({ ...current, nextWeek: value }))} />
-        <label>Tags<input value={draft.tags.join(', ')} onChange={(event) => setDraft((current) => ({ ...current, tags: parseTags(event.target.value) }))} placeholder="weekly-review, pipeline" /></label>
         <button type="submit">Save weekly log</button>
       </form>
       <Panel title="Saved weekly logs">
@@ -823,7 +886,6 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
           <article className="miniCard" key={log.id}>
             <div className="cardHead"><strong>Week of {log.weekStart}</strong><button type="button" onClick={() => deleteWeeklyLog(log)}>Delete</button></div>
             <p className="preline">{compactLog(log)}</p>
-            <Meta tags={log.tags} />
           </article>
         ))}
       </Panel>
@@ -851,7 +913,6 @@ function SystemsPage({ systems, addSystem, updateSystem, deleteSystem }: {
           <article className="card" key={system.id}>
             <div className="cardHead"><h3>{system.name}</h3><button type="button" onClick={() => deleteSystem(system)}>Delete</button></div>
             <p>{system.purpose}</p>
-            <Meta tags={system.tags} />
             <details><summary>Details</summary><SystemDetails system={system} /><SystemForm title="Edit system" system={system} onSubmit={(event) => updateSystem(event, system.id)} /></details>
           </article>
         ))}
@@ -878,7 +939,10 @@ function TroubleshootingPage({ entries, prefill, addTroubleshooting, updateTroub
           {visible.map((entry) => (
             <article className="card" key={entry.id}>
               <div className="cardHead"><h3>{entry.title}</h3><button type="button" onClick={() => deleteTroubleshooting(entry)}>Delete</button></div>
-              <p className="preline">{entry.solution || entry.symptoms}</p>
+              <p><span className="badge done">{entry.dateResolved || 'No date'}</span> {entry.relatedSystem}</p>
+              <DetailBlock label="What happened" value={entry.symptoms || 'No notes yet.'} />
+              {entry.rootCause ? <DetailBlock label="Root cause" value={entry.rootCause} /> : null}
+              {entry.solution ? <DetailBlock label="Fix / lesson learned" value={entry.solution} /> : null}
               <Meta tags={entry.tags} />
               <details><summary>Edit</summary><TroubleshootingForm title="Edit troubleshooting entry" entry={entry} onSubmit={(event) => updateTroubleshooting(event, entry.id)} /></details>
             </article>
@@ -953,17 +1017,22 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
   return (
     <section className="grid">
       <Panel title="Notifications"><p>Allow browser notifications for local reminders while DayBook is open.</p><button type="button" onClick={enableNotifications}>Enable reminders</button></Panel>
-      <Panel title="Theme">
+      <Panel title="Appearance">
         <label>Application theme
           <select value={settings.theme} onChange={(event) => updateSettings({ ...settings, theme: event.target.value as AppSettings['theme'] })}>
-            <option value="mint">Mint</option><option value="sage">Sage</option><option value="cream">Cream</option>
+            <option value="mint">Mint</option><option value="sage">Sage</option><option value="cream">Cream</option><option value="sky">Sky</option><option value="rose">Rose</option><option value="graphite">Graphite</option>
+          </select>
+        </label>
+        <label>Display density
+          <select value={settings.density} onChange={(event) => updateSettings({ ...settings, density: event.target.value as AppSettings['density'] })}>
+            <option value="comfortable">Comfortable</option><option value="compact">Compact</option>
           </select>
         </label>
       </Panel>
       <Panel title="Export"><p>Download a plain JSON backup for local storage or another device.</p><button type="button" onClick={exportJson}>Export JSON</button></Panel>
-      <Panel title="Auto backup"><p>Choose a JSON file in a Drive-synced folder. DayBook will update it after local data changes while the app is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
+      <Panel title="Auto backup"><p>Choose a JSON file in a Drive-synced folder. DayBook updates it after local data changes and again at 00:00 daily while the app is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
       <Panel title="Import"><p>Import merges the selected DayBook JSON file into the current local data.</p><input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} /></Panel>
-      <Panel title="Local data"><p>{data.tasks.length} tasks, {data.notes.length} notes, {data.weeklyLogs.length} weekly logs, {data.systems.length} systems, {data.troubleshooting.length} troubleshooting entries, {data.questions.length} questions, {data.captures.length} captures.</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
+      <Panel title="Local data"><p>{data.tasks.length} tasks, {data.notes.length} notes, {data.glossary.length} glossary terms, {data.weeklyLogs.length} weekly logs, {data.systems.length} systems, {data.troubleshooting.length} troubleshooting entries, {data.questions.length} questions, {data.captures.length} captures.</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
     </section>
   );
 }
@@ -991,18 +1060,76 @@ function TaskForm({ title, task, projects, onSubmit, onCancel }: {
   );
 }
 
+function GlossaryForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="panel" onSubmit={onSubmit}>
+      <h2>Add glossary term</h2>
+      <label>Term<input name="term" required placeholder="Yield, SPC, lot..." /></label>
+      <label>Meaning<textarea name="meaning" rows={3} required placeholder="Plain-language meaning" /></label>
+      <label>Where it appears<textarea name="context" rows={3} placeholder="Process, machine, report, dataset..." /></label>
+      <button type="submit">Save term</button>
+    </form>
+  );
+}
+
 function ProjectForm({ title, project, onSubmit, onCancel }: { title: string; project?: Project; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
+  const [stages, setStages] = useState(() => {
+    const saved = parseProjectTimeline(project?.timeline ?? '');
+    return saved.length > 0 ? saved : [{ name: '', due: '', detail: '' }];
+  });
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>{title}</h2>
       <label>Name<input name="name" required defaultValue={project?.name} placeholder="Warehouse cost review" /></label>
       <label>Overview<textarea name="overview" rows={3} defaultValue={project?.overview} /></label>
       <label>Project details<textarea name="details" rows={4} defaultValue={project?.details} /></label>
-      <label>Project stages<textarea name="timeline" rows={4} defaultValue={project?.timeline} placeholder="Stage 1 | 2026-09-01 | Gather requirements" /></label>
-      <label>Tags<input name="tags" defaultValue={project?.tags.join(', ')} placeholder="process, system" /></label>
+      <ProjectStageFields stages={stages} setStages={setStages} />
+      <input type="hidden" name="timeline" value={serializeProjectTimeline(stages)} />
       <div className="formActions"><button type="submit">{project ? 'Save project' : 'Create project'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
     </form>
   );
+}
+
+function ProjectStageFields({ stages, setStages }: {
+  stages: ProjectStage[];
+  setStages: Dispatch<SetStateAction<ProjectStage[]>>;
+}) {
+  const updateStage = (index: number, change: Partial<ProjectStage>) => {
+    setStages((current) => current.map((stage, stageIndex) => stageIndex === index ? { ...stage, ...change } : stage));
+  };
+  return (
+    <fieldset className="stageFields">
+      <legend>Project stages</legend>
+      {stages.map((stage, index) => (
+        <div className="stageFieldRow" key={index}>
+          <label>Stage<input value={stage.name} onChange={(event) => updateStage(index, { name: event.target.value })} placeholder={`Stage ${index + 1}`} /></label>
+          <label>Date<input type="date" value={stage.due} onChange={(event) => updateStage(index, { due: event.target.value })} /></label>
+          <label>Details<input value={stage.detail} onChange={(event) => updateStage(index, { detail: event.target.value })} placeholder="Gather requirements" /></label>
+          <button type="button" onClick={() => setStages((current) => current.length === 1 ? [{ name: '', due: '', detail: '' }] : current.filter((_, stageIndex) => stageIndex !== index))}>Remove</button>
+        </div>
+      ))}
+      <button type="button" onClick={() => setStages((current) => [...current, { name: '', due: '', detail: '' }])}>Add stage</button>
+    </fieldset>
+  );
+}
+
+function ProjectSummary({ project, tasks, showOverview }: { project: Project; tasks: Task[]; showOverview: boolean }) {
+  const done = tasks.filter((task) => task.status === 'done').length;
+  const open = tasks.length - done;
+  return (
+    <div className="projectSummary">
+      {showOverview ? <p>{project.overview || 'No overview yet.'}</p> : null}
+      <div className="projectStats">
+        <span>{open} open</span>
+        <span>{done} done</span>
+        <span>{parseProjectTimeline(project.timeline).length} stages</span>
+      </div>
+    </div>
+  );
+}
+
+function DetailBlock({ label, value }: { label: string; value: string }) {
+  return <div className="detailBlock"><strong>{label}</strong><p className="preline">{value}</p></div>;
 }
 
 function SystemForm({ title, system, onSubmit }: { title: string; system?: SystemEntry; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
@@ -1012,19 +1139,8 @@ function SystemForm({ title, system, onSubmit }: { title: string; system?: Syste
       <label>Name<input name="name" required defaultValue={system?.name} /></label>
       <label>Purpose<textarea name="purpose" rows={3} defaultValue={system?.purpose} /></label>
       <label>Owner / team<input name="owner" defaultValue={system?.owner} /></label>
-      <label>Users<input name="users" defaultValue={system?.users} /></label>
-      <label>Inputs<textarea name="inputs" rows={3} defaultValue={system?.inputs} /></label>
-      <label>Outputs<textarea name="outputs" rows={3} defaultValue={system?.outputs} /></label>
-      <label>Workflow / data flow<textarea name="workflow" rows={5} defaultValue={system?.workflow} /></label>
-      <label>Repositories<textarea name="repositories" rows={2} defaultValue={system?.repositories} /></label>
-      <label>Databases<textarea name="databases" rows={2} defaultValue={system?.databases} /></label>
-      <label>Infrastructure<textarea name="infrastructure" rows={2} defaultValue={system?.infrastructure} /></label>
-      <label>Dependencies<textarea name="dependencies" rows={2} defaultValue={system?.dependencies} /></label>
+      <label>Data / workflow<textarea name="workflow" rows={4} defaultValue={systemSummary(system)} placeholder="Source data, main flow, important tables or dashboards" /></label>
       <label>Common failures<textarea name="commonFailures" rows={3} defaultValue={system?.commonFailures} /></label>
-      <label>Debugging notes<textarea name="debuggingNotes" rows={3} defaultValue={system?.debuggingNotes} /></label>
-      <label>Related knowledge notes<textarea name="relatedKnowledge" rows={2} defaultValue={system?.relatedKnowledge} /></label>
-      <label>Related troubleshooting entries<textarea name="relatedTroubleshooting" rows={2} defaultValue={system?.relatedTroubleshooting} /></label>
-      <label>Tags<input name="tags" defaultValue={system?.tags.join(', ')} placeholder="pipeline, database" /></label>
       <button type="submit">{system ? 'Save system' : 'Create system'}</button>
     </form>
   );
@@ -1033,18 +1149,8 @@ function SystemForm({ title, system, onSubmit }: { title: string; system?: Syste
 function SystemDetails({ system }: { system: SystemEntry }) {
   return <p className="preline">{[
     ['Owner / team', system.owner],
-    ['Users', system.users],
-    ['Inputs', system.inputs],
-    ['Outputs', system.outputs],
-    ['Workflow / data flow', system.workflow],
-    ['Repositories', system.repositories],
-    ['Databases', system.databases],
-    ['Infrastructure', system.infrastructure],
-    ['Dependencies', system.dependencies],
-    ['Common failures', system.commonFailures],
-    ['Debugging notes', system.debuggingNotes],
-    ['Related knowledge notes', system.relatedKnowledge],
-    ['Related troubleshooting entries', system.relatedTroubleshooting]
+    ['Data / workflow', systemSummary(system)],
+    ['Common failures', system.commonFailures]
   ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join('\n\n')}</p>;
 }
 
@@ -1053,13 +1159,9 @@ function TroubleshootingForm({ title, entry, prefill, onSubmit }: { title: strin
     <form className="panel" onSubmit={onSubmit} key={prefill ?? entry?.id ?? 'troubleshooting'}>
       <h2>{title}</h2>
       <label>Title / problem<input name="title" required defaultValue={entry?.title ?? prefill} /></label>
-      <label>Symptoms<textarea name="symptoms" rows={3} defaultValue={entry?.symptoms} /></label>
-      <label>Error message or observed behaviour<textarea name="error" rows={3} defaultValue={entry?.error} /></label>
-      <label>Initial hypothesis<textarea name="hypothesis" rows={2} defaultValue={entry?.hypothesis} /></label>
-      <label>Investigation steps<textarea name="investigation" rows={4} defaultValue={entry?.investigation} /></label>
+      <label>What happened<textarea name="symptoms" rows={3} defaultValue={troubleshootingObserved(entry)} /></label>
       <label>Root cause<textarea name="rootCause" rows={3} defaultValue={entry?.rootCause} /></label>
-      <label>Solution<textarea name="solution" rows={3} defaultValue={entry?.solution} /></label>
-      <label>Prevention / future improvement<textarea name="prevention" rows={3} defaultValue={entry?.prevention} /></label>
+      <label>Fix / lesson learned<textarea name="solution" rows={4} defaultValue={troubleshootingFix(entry)} /></label>
       <label>Related system<input name="relatedSystem" defaultValue={entry?.relatedSystem} /></label>
       <label>Tags<input name="tags" defaultValue={entry?.tags.join(', ')} placeholder="debugging, pipeline" /></label>
       <label>Date resolved<input name="dateResolved" type="date" defaultValue={entry?.dateResolved} /></label>
@@ -1082,22 +1184,36 @@ function QuestionForm({ title, question, prefill, onSubmit }: { title: string; q
 }
 
 function ProjectTimeline({ timeline }: { timeline: string }) {
-  const phases = timeline.split('\n').map((item) => item.trim()).filter(Boolean).map((line) => {
-    const [name, due, detail] = line.split('|').map((item) => item.trim());
-    return { name, due, detail };
-  });
+  const phases = parseProjectTimeline(timeline);
   if (phases.length === 0) return <p>No planned timeline yet.</p>;
   return (
     <div className="timeline">
       {phases.map((phase, index) => (
         <div className="timelineRow" key={`${phase.name}-${index}`}>
-          <span className="timelineLabel">{phase.name}{phase.due ? ` · ${phase.due}` : ''}</span>
-          <div className="timelineBar" style={{ width: `${Math.max(28, Math.min(100, 30 + index * 18))}%` }} />
+          <span className="timelineLabel">{phase.name}</span>
+          <span>{phase.due || 'No date'}</span>
           {phase.detail ? <span className="timelineDetail">{phase.detail}</span> : null}
         </div>
       ))}
     </div>
   );
+}
+
+type ProjectStage = { name: string; due: string; detail: string };
+
+export function parseProjectTimeline(timeline: string): ProjectStage[] {
+  return timeline.split('\n').map((item) => item.trim()).filter(Boolean).map((line) => {
+    const [name, due, detail] = line.split('|').map((item) => item.trim());
+    return { name, due, detail };
+  });
+}
+
+export function serializeProjectTimeline(stages: ProjectStage[]) {
+  return stages
+    .map((stage) => [stage.name, stage.due, stage.detail].map((value) => value.trim()))
+    .filter(([name, due, detail]) => name || due || detail)
+    .map(([name, due, detail]) => [name, due, detail].join(' | '))
+    .join('\n');
 }
 
 function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, compact = false, expandedMap, setExpandedMap }: {
@@ -1147,7 +1263,6 @@ function CaptureList({ captures, convertCapture, deleteCapture }: { captures: Qu
             <button type="button" onClick={() => convertCapture(capture, 'knowledge')}>Knowledge</button>
             <button type="button" onClick={() => convertCapture(capture, 'questions')}>Question</button>
             <button type="button" onClick={() => convertCapture(capture, 'troubleshooting')}>Troubleshooting</button>
-            <button type="button" onClick={() => convertCapture(capture, 'weekly')}>Weekly log</button>
             <button type="button" onClick={() => deleteCapture(capture)}>Delete</button>
           </div>
         </article>
@@ -1190,24 +1305,43 @@ function formatActivityTime(createdAt: string) {
   return `[${day} ${month} ${hours}:${minutes}]`;
 }
 
+function weeklyContribution(log: WeeklyLog) {
+  return [log.solved, log.impact].filter(Boolean).join('\n');
+}
+
+function systemSummary(system?: SystemEntry) {
+  if (!system) return '';
+  return [system.workflow, system.inputs, system.outputs, system.databases].filter(Boolean).join('\n');
+}
+
+function troubleshootingObserved(entry?: TroubleshootingEntry) {
+  if (!entry) return '';
+  return [entry.symptoms, entry.error, entry.hypothesis, entry.investigation].filter(Boolean).join('\n');
+}
+
+function troubleshootingFix(entry?: TroubleshootingEntry) {
+  if (!entry) return '';
+  return [entry.solution, entry.prevention].filter(Boolean).join('\n');
+}
+
 function systemFromForm(form: FormData, now: string): Omit<SystemEntry, 'id'> {
   return {
     name: String(form.get('name') || '').trim(),
     purpose: String(form.get('purpose') || '').trim(),
     owner: String(form.get('owner') || '').trim(),
-    users: String(form.get('users') || '').trim(),
-    inputs: String(form.get('inputs') || '').trim(),
-    outputs: String(form.get('outputs') || '').trim(),
+    users: '',
+    inputs: '',
+    outputs: '',
     workflow: String(form.get('workflow') || '').trim(),
-    repositories: String(form.get('repositories') || '').trim(),
-    databases: String(form.get('databases') || '').trim(),
-    infrastructure: String(form.get('infrastructure') || '').trim(),
-    dependencies: String(form.get('dependencies') || '').trim(),
+    repositories: '',
+    databases: '',
+    infrastructure: '',
+    dependencies: '',
     commonFailures: String(form.get('commonFailures') || '').trim(),
-    debuggingNotes: String(form.get('debuggingNotes') || '').trim(),
-    relatedKnowledge: String(form.get('relatedKnowledge') || '').trim(),
-    relatedTroubleshooting: String(form.get('relatedTroubleshooting') || '').trim(),
-    tags: parseTags(String(form.get('tags') || '')),
+    debuggingNotes: '',
+    relatedKnowledge: '',
+    relatedTroubleshooting: '',
+    tags: [],
     createdAt: now,
     updatedAt: now
   };
@@ -1217,15 +1351,25 @@ function troubleshootingFromForm(form: FormData, now: string): Omit<Troubleshoot
   return {
     title: String(form.get('title') || '').trim(),
     symptoms: String(form.get('symptoms') || '').trim(),
-    error: String(form.get('error') || '').trim(),
-    hypothesis: String(form.get('hypothesis') || '').trim(),
-    investigation: String(form.get('investigation') || '').trim(),
+    error: '',
+    hypothesis: '',
+    investigation: '',
     rootCause: String(form.get('rootCause') || '').trim(),
     solution: String(form.get('solution') || '').trim(),
-    prevention: String(form.get('prevention') || '').trim(),
+    prevention: '',
     relatedSystem: String(form.get('relatedSystem') || '').trim(),
     tags: parseTags(String(form.get('tags') || '')),
     dateResolved: String(form.get('dateResolved') || ''),
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+function glossaryFromForm(form: FormData, now: string): Omit<GlossaryEntry, 'id'> {
+  return {
+    term: String(form.get('term') || '').trim(),
+    meaning: String(form.get('meaning') || '').trim(),
+    context: String(form.get('context') || '').trim(),
     createdAt: now,
     updatedAt: now
   };
@@ -1242,7 +1386,8 @@ function mergeImportedData(current: DayBookData, imported: Partial<DayBookData>)
     troubleshooting: mergeById(current.troubleshooting, imported.troubleshooting),
     questions: mergeById(current.questions, imported.questions),
     captures: mergeById(current.captures, imported.captures),
-    settings: imported.settings ? { theme: imported.settings.theme ?? current.settings.theme } : current.settings
+    glossary: mergeById(current.glossary, imported.glossary),
+    settings: imported.settings ? { ...current.settings, ...imported.settings } : current.settings
   };
 }
 
@@ -1291,20 +1436,28 @@ async function writeBackup(handle: BackupFileHandle, data: DayBookData, setBacku
   }
 }
 
+export function msUntilNextBackup(now = new Date()) {
+  const next = new Date(now);
+  next.setHours(24, 0, 0, 0);
+  return next.getTime() - now.getTime();
+}
+
 function filterList<T>(items: T[], query: string, text: (item: T) => string[]) {
   const needle = query.trim().toLowerCase();
   if (!needle) return items;
   return items.filter((item) => text(item).join(' ').toLowerCase().includes(needle));
 }
 
-function searchData(data: DayBookData, query: string) {
+export function searchData(data: DayBookData, query: string) {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   const matches = (values: string[]) => values.join(' ').toLowerCase().includes(needle);
   return [
+    ...data.tasks.filter((task) => matches([task.title, task.notes, task.status, task.dueAt, task.roadblock, task.tags.join(' ')])).map((task) => ({ type: 'Task', id: task.id, title: task.title, detail: task.notes || task.roadblock || task.status, tags: task.tags })),
     ...data.notes.filter((note) => matches([note.title, note.body, note.tags.join(' ')])).map((note) => ({ type: 'Knowledge', id: note.id, title: note.title, detail: note.body.slice(0, 160), tags: note.tags })),
-    ...data.weeklyLogs.filter((log) => matches([log.weekStart, log.learned, log.workedOn, log.blockers, log.solved, log.impact, log.openQuestions, log.nextWeek, log.tags.join(' ')])).map((log) => ({ type: 'Weekly Log', id: log.id, title: `Week of ${log.weekStart}`, detail: compactLog(log).slice(0, 160), tags: log.tags })),
-    ...data.systems.filter((system) => matches([system.name, system.purpose, system.workflow, system.databases, system.relatedKnowledge, system.relatedTroubleshooting, system.tags.join(' ')])).map((system) => ({ type: 'System', id: system.id, title: system.name, detail: system.purpose, tags: system.tags })),
+    ...data.glossary.filter((entry) => matches([entry.term, entry.meaning, entry.context])).map((entry) => ({ type: 'Glossary', id: entry.id, title: entry.term, detail: entry.meaning, tags: [] })),
+    ...data.weeklyLogs.filter((log) => matches([log.weekStart, log.learned, log.workedOn, log.blockers, weeklyContribution(log), log.nextWeek])).map((log) => ({ type: 'Weekly Log', id: log.id, title: `Week of ${log.weekStart}`, detail: compactLog(log).slice(0, 160), tags: [] })),
+    ...data.systems.filter((system) => matches([system.name, system.purpose, systemSummary(system), system.commonFailures])).map((system) => ({ type: 'System', id: system.id, title: system.name, detail: system.purpose, tags: [] })),
     ...data.troubleshooting.filter((entry) => matches([entry.title, entry.symptoms, entry.error, entry.rootCause, entry.solution, entry.relatedSystem, entry.tags.join(' ')])).map((entry) => ({ type: 'Troubleshooting', id: entry.id, title: entry.title, detail: entry.solution || entry.rootCause || entry.symptoms, tags: entry.tags })),
     ...data.questions.filter((question) => matches([question.question, question.status, question.relatedSystem, question.notes])).map((question) => ({ type: 'Question', id: question.id, title: question.question, detail: question.notes || question.status, tags: [] })),
     ...data.captures.filter((capture) => matches([capture.text, capture.tags.join(' ')])).map((capture) => ({ type: 'Quick Capture', id: capture.id, title: capture.text.slice(0, 80), detail: formatActivityTime(capture.createdAt), tags: capture.tags }))
@@ -1328,13 +1481,7 @@ function compactLog(log: WeeklyLog) {
   return [
     ['Learned', log.learned],
     ['Worked on', log.workedOn],
-    ['Solved', log.solved],
-    ['Impact', log.impact],
-    ['Open questions', log.openQuestions],
+    ['Problems solved / contribution', weeklyContribution(log)],
     ['Next week', log.nextWeek]
   ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join('\n\n');
-}
-
-function joinLines(existing: string, next: string) {
-  return [existing, next].filter(Boolean).join('\n');
 }

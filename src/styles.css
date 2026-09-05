@@ -39,6 +39,43 @@ html[data-theme='cream'] {
   --notice-bg: #f6ead6;
 }
 
+html[data-theme='sky'] {
+  --bg: #edf6fb;
+  --panel: #fbfdff;
+  --surface: #d7e9f4;
+  --surface-2: #eef7fc;
+  --accent: #24455f;
+  --accent-2: #4d82a6;
+  --shadow: 0 10px 30px rgba(36, 69, 95, 0.08);
+  --notice-bg: #e1f0f8;
+}
+
+html[data-theme='rose'] {
+  --bg: #f8eeee;
+  --panel: #fffafa;
+  --surface: #efd9d7;
+  --surface-2: #fbf1f1;
+  --accent: #6b3431;
+  --accent-2: #a8645e;
+  --shadow: 0 10px 30px rgba(107, 52, 49, 0.08);
+  --notice-bg: #f7e3e1;
+}
+
+html[data-theme='graphite'] {
+  --bg: #ecefed;
+  --panel: #fbfbfa;
+  --surface: #d9ddda;
+  --surface-2: #f2f4f2;
+  --accent: #2f3633;
+  --accent-2: #626c66;
+  --shadow: 0 10px 30px rgba(47, 54, 51, 0.09);
+  --notice-bg: #e5e8e5;
+}
+
+html[data-density='compact'] {
+  font-size: 14px;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -405,13 +442,23 @@ h3 {
 
 input,
 select,
-textarea {
+textarea,
+fieldset {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel);
   color: var(--text);
   padding: 0.7rem 0.76rem;
+}
+
+fieldset {
+  margin: 0 0 12px;
+}
+
+legend {
+  padding: 0 6px;
+  font-weight: 750;
 }
 
 textarea {
@@ -619,6 +666,43 @@ button:focus-visible {
   gap: 6px;
 }
 
+.projectSummary,
+.detailBlock {
+  display: grid;
+  gap: 8px;
+}
+
+.projectStats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.projectStats span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.stageFields {
+  display: grid;
+  gap: 12px;
+}
+
+.stageFieldRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 150px minmax(180px, 2fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.stageFieldRow label {
+  margin-bottom: 0;
+}
+
 .metaLine {
   margin: 0;
   color: var(--muted);
@@ -635,20 +719,16 @@ button:focus-visible {
 
 .timelineRow {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
+  grid-template-columns: minmax(130px, 1fr) 120px minmax(0, 2fr);
   gap: 12px;
-  align-items: center;
+  align-items: start;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #d8e8d3;
 }
 
 .timelineLabel {
   color: #34463a;
   font-weight: 700;
-}
-
-.timelineBar {
-  height: 14px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #7ab27b, #c5e4b8);
 }
 
 details {
@@ -700,7 +780,8 @@ summary {
   }
 
   .pageActions,
-  .timelineRow {
+  .timelineRow,
+  .stageFieldRow {
     display: grid;
     grid-template-columns: 1fr;
   }

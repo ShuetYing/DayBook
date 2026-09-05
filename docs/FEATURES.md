@@ -39,7 +39,7 @@ Focus the user on the current week and support quick work capture.
 - Provide an entry point to the current week's Weekly Log.
 - Show current-week counts for today tasks, knowledge notes, solved troubleshooting entries, open questions and expired tasks.
 - Provide Quick Capture for short work notes, questions, errors or decisions.
-- Allow quick captures to prefill a knowledge note, question, troubleshooting entry or weekly log item.
+- Allow quick captures to prefill a knowledge note, question or troubleshooting entry.
 - Show task overview and latest activity.
 
 ---
@@ -76,9 +76,26 @@ Allow users to manage projects, including project details, sub-tasks and planned
 ### Expected behaviour
 
 - Use the same create-button and creation interaction pattern as the Tasks page.
-- Use tags for project organisation.
 - Link tasks to projects as subtasks.
-- Display project timeline text as simple staged rows.
+- Let users enter project stages with separate stage, date and detail fields.
+- Display project stages as simple staged rows.
+
+---
+
+## Glossary
+
+Status: Implemented
+
+### Requirement
+
+Help a new manufacturing data scientist build domain vocabulary.
+
+### Expected behaviour
+
+Each glossary term contains:
+- Term
+- Meaning
+- Where it appears
 
 ---
 
@@ -128,9 +145,7 @@ Each weekly log contains:
 - Learned
 - Worked on
 - Problems / blockers
-- Problems solved
-- Impact / contribution
-- Open questions
+- Problems solved / contribution
 - Next week priorities
 
 Each section can contain multiple entries as plain text.
@@ -154,21 +169,10 @@ Each system entry supports:
 - Name
 - Purpose
 - Owner / team
-- Users
-- Inputs
-- Outputs
-- Workflow / data flow
-- Repositories
-- Databases
-- Infrastructure
-- Dependencies
+- Data / workflow
 - Common failures
-- Debugging notes
-- Related knowledge notes
-- Related troubleshooting entries
-- Tags
 
-The workflow field is plain structured text.
+The data / workflow field is plain structured text.
 
 ---
 
@@ -184,13 +188,9 @@ Document work problems and their solutions as a searchable personal knowledge ba
 
 Each troubleshooting entry contains:
 - Title / problem
-- Symptoms
-- Error message or observed behaviour
-- Initial hypothesis
-- Investigation steps
+- What happened
 - Root cause
-- Solution
-- Prevention / future improvement
+- Fix / lesson learned
 - Related system
 - Tags
 - Date resolved
@@ -233,14 +233,16 @@ Search across personal work knowledge and progress records.
 ### Expected behaviour
 
 Search covers:
+- Tasks
 - Knowledge notes
+- Glossary terms
 - Weekly logs
 - Systems
 - Troubleshooting entries
 - Questions
 - Quick captures
 
-Search matches titles, body/content, tags and related system names, and labels each result by content type.
+Search matches titles, body/content, related system names and tags where that content type supports tags, and labels each result by content type.
 
 ---
 
@@ -258,11 +260,11 @@ Users can:
 - Export application data as JSON.
 - Select a JSON file for automatic local backup.
 - Import JSON data from another device.
-- Select the application theme.
+- Select the application theme and display density.
 - Clear all saved local data to start over.
 
 Exported data should be saved locally and import should preserve existing application data where appropriate.
-Auto backup should write the full local DayBook data object to the selected file after data changes while the app is open.
+Auto backup should write the full local DayBook data object to the selected file after data changes and at 00:00 daily while the app is open.
 
 ---
 

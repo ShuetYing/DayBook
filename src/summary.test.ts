@@ -12,7 +12,8 @@ const emptyData: DayBookData = {
   troubleshooting: [],
   questions: [],
   captures: [],
-  settings: { theme: 'mint' }
+  glossary: [],
+  settings: { theme: 'mint', density: 'comfortable' }
 };
 
 describe('weekly review draft', () => {
@@ -27,6 +28,14 @@ describe('weekly review draft', () => {
         tags: ['pipeline'],
         createdAt: '2026-08-25T09:00:00.000Z',
         updatedAt: '2026-08-25T09:00:00.000Z'
+      }],
+      glossary: [{
+        id: 'term-1',
+        term: 'SPC',
+        meaning: 'Statistical process control',
+        context: 'Manufacturing quality charts',
+        createdAt: '2026-08-25T10:00:00.000Z',
+        updatedAt: '2026-08-25T10:00:00.000Z'
       }],
       troubleshooting: [{
         id: 'fix-1',
@@ -58,8 +67,10 @@ describe('weekly review draft', () => {
 
     expect(draft.weekStart).toBe('2026-08-24');
     expect(draft.learned).toContain('Pipeline trigger mechanism');
+    expect(draft.learned).toContain('SPC');
     expect(draft.solved).toContain('Missing metadata broke pipeline');
-    expect(draft.openQuestions).toContain('Who owns the metadata table?');
+    expect(draft.openQuestions).toBe('');
+    expect(draft.nextWeek).toContain('Who owns the metadata table?');
   });
 });
 

@@ -6,11 +6,11 @@ DayBook is a local-first personal productivity and learning app for one user. It
 
 - Dashboard with quick capture, current-week review entry point, task overview, and latest activity
 - Tasks with status, deadlines, reminders, roadblocks, tags, and project linking
-- Projects with overview, linked subtasks, and timeline notes
+- Projects with overview, linked subtasks, and structured stage rows
 - Knowledge notes with a reusable work-learning template, tags, and search
-- Weekly logs for learned items, work completed, blockers, solved problems, impact, questions, and next-week priorities
+- Weekly logs for learned items, work completed, blockers, contribution, and next-week priorities
 - Systems, troubleshooting, questions, quick captures, and global search for local work knowledge
-- JSON export/import and browser-native auto backup to a user-selected file
+- Appearance themes, compact display mode, JSON export/import, and browser-native auto backup to a user-selected file
 
 ## Requirements
 
@@ -152,9 +152,15 @@ DayBook stores data locally in the browser with IndexedDB. There is no hosted ba
 
 Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to merge another DayBook export into the current local data.
 
-Use `Settings > Choose backup file` to auto-save the full DayBook JSON backup after data changes. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
+Use `Settings > Choose backup file` to auto-save the full DayBook JSON backup after data changes and at 00:00 daily while DayBook is open. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
 
-Auto backup depends on browser file picker support. If your browser does not support it, use manual JSON export.
+Auto backup depends on browser file picker support and cannot run while the browser/app is closed. If your browser does not support it, use manual JSON export.
+
+## Commercial Readiness Notes
+
+DayBook is mature for local-first, single-user browser use: it works offline after first load, stores data locally, supports JSON backup/import, and avoids recurring infrastructure cost.
+
+For company-wide deployment, add central identity, admin policy, managed backups, audit/compliance controls, and support processes before selling it as an enterprise multi-user product.
 
 ## Reminders
 

@@ -46,10 +46,11 @@ export function generateWeeklyReviewDraft(data: DayBookData, selectedDate = new 
     const date = new Date(value);
     return date >= start && date <= end;
   };
-  const titles = (items: { title?: string; name?: string; question?: string; text?: string }[]) =>
-    items.map((item) => item.title || item.name || item.question || item.text || '').filter(Boolean).join('\n');
+  const titles = (items: { title?: string; name?: string; question?: string; text?: string; term?: string }[]) =>
+    items.map((item) => item.title || item.name || item.question || item.text || item.term || '').filter(Boolean).join('\n');
 
   const notes = data.notes.filter((note) => inWeek(note.createdAt));
+  const glossary = data.glossary.filter((entry) => inWeek(entry.createdAt));
   const solved = data.troubleshooting.filter((entry) => entry.dateResolved && inWeek(`${entry.dateResolved}T12:00:00`));
   const answered = data.questions.filter((question) => question.status === 'Answered' && inWeek(question.updatedAt));
   const systems = data.systems.filter((system) => inWeek(system.updatedAt));
@@ -59,14 +60,14 @@ export function generateWeeklyReviewDraft(data: DayBookData, selectedDate = new 
 
   return {
     ...emptyWeeklyLog(weekStart, now),
-    learned: titles(notes),
+    learned: titles([...notes, ...glossary]),
     workedOn: titles([...doneTasks, ...systems, ...captures]),
     blockers: titles(data.tasks.filter((task) => task.roadblock && task.status !== 'done')),
     solved: titles(solved),
     impact: doneTasks.map((task) => task.title).join('\n'),
-    openQuestions: titles(openQuestions),
+    openQuestions: '',
     nextWeek: titles([...openQuestions, ...answered]).split('\n').slice(0, 5).join('\n'),
-    tags: ['weekly-review']
+    tags: []
   };
 }
 
