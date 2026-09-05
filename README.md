@@ -4,7 +4,7 @@ DayBook is a local-first personal productivity and learning app for one user. It
 
 ## Features
 
-- Dashboard with quick capture, current-week review entry point, task overview, and latest activity
+- Polished dashboard with quick capture, current-week review entry point, task overview, and latest activity
 - Tasks with status, deadlines, reminders, roadblocks, tags, and project linking
 - Projects with overview, linked subtasks, and structured stage rows
 - Knowledge notes with a reusable work-learning template, tags, and search
@@ -152,7 +152,7 @@ DayBook stores data locally in the browser with IndexedDB. There is no hosted ba
 
 Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to merge another DayBook export into the current local data.
 
-Use `Settings > Choose backup file` to auto-save the full DayBook JSON backup after data changes and at 00:00 daily while DayBook is open. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
+Use `Settings > Choose backup file` to back up after changes and daily at 00:00 while DayBook is open. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
 
 Auto backup depends on browser file picker support and cannot run while the browser/app is closed. If your browser does not support it, use manual JSON export.
 

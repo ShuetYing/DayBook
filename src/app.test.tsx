@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { listTaskMonths, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
+import { formatWeekRange, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
 import type { DayBookData, Task } from './types';
 
 function makeTask(overrides: Partial<Task>): Task {
@@ -19,6 +19,27 @@ function makeTask(overrides: Partial<Task>): Task {
     ...overrides
   };
 }
+
+const data: DayBookData = {
+  tasks: [makeTask({ title: 'Review supplier pipeline', notes: 'Check blocked warehouse handoff', tags: ['pipeline'] })],
+  notes: [],
+  projects: [],
+  activities: [],
+  weeklyLogs: [],
+  systems: [],
+  troubleshooting: [],
+  questions: [],
+  captures: [],
+  glossary: [{
+    id: 'term-1',
+    term: 'SPC',
+    meaning: 'Statistical process control',
+    context: 'Quality chart',
+    createdAt: '2026-09-03T08:00:00.000Z',
+    updatedAt: '2026-09-03T08:00:00.000Z'
+  }],
+  settings: { theme: 'mint', density: 'comfortable' }
+};
 
 describe('completed task month helpers', () => {
   it('uses updatedAt as the completed month', () => {
@@ -54,27 +75,6 @@ describe('project timeline helpers', () => {
 });
 
 describe('global search', () => {
-  const data: DayBookData = {
-    tasks: [makeTask({ title: 'Review supplier pipeline', notes: 'Check blocked warehouse handoff', tags: ['pipeline'] })],
-    notes: [],
-    projects: [],
-    activities: [],
-    weeklyLogs: [],
-    systems: [],
-    troubleshooting: [],
-    questions: [],
-    captures: [],
-    glossary: [{
-      id: 'term-1',
-      term: 'SPC',
-      meaning: 'Statistical process control',
-      context: 'Quality chart',
-      createdAt: '2026-09-03T08:00:00.000Z',
-      updatedAt: '2026-09-03T08:00:00.000Z'
-    }],
-    settings: { theme: 'mint', density: 'comfortable' }
-  };
-
   it('includes matching tasks', () => {
     expect(searchData(data, 'warehouse')).toEqual([
       { type: 'Task', id: 'task-1', title: 'Review supplier pipeline', detail: 'Check blocked warehouse handoff', tags: ['pipeline'] }
@@ -90,5 +90,21 @@ describe('daily backup schedule', () => {
   it('targets the next local midnight', () => {
     expect(msUntilNextBackup(new Date(2026, 8, 5, 23, 59, 0))).toBe(60_000);
     expect(msUntilNextBackup(new Date(2026, 8, 5, 0, 0, 0))).toBe(86_400_000);
+  });
+});
+
+describe('local data summary', () => {
+  it('only shows stored record types', () => {
+    expect(localDataSummary(data)).toBe('1 task, 1 glossary term');
+  });
+
+  it('returns blank when no local records are stored', () => {
+    expect(localDataSummary({ ...data, tasks: [], glossary: [] })).toBe('');
+  });
+});
+
+describe('week range label', () => {
+  it('keeps the dashboard week label compact', () => {
+    expect(formatWeekRange(new Date(2026, 7, 31), new Date(2026, 8, 6))).toBe('31 Aug - 6 Sept 2026');
   });
 });

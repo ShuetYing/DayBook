@@ -47,7 +47,7 @@ const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'tasks', label: 'Tasks' },
   { page: 'projects', label: 'Projects' },
-  { page: 'knowledge', label: 'Knowledge Repo' },
+  { page: 'knowledge', label: 'Knowledge' },
   { page: 'glossary', label: 'Glossary' },
   { page: 'systems', label: 'Systems' },
   { page: 'troubleshooting', label: 'Troubleshooting' },
@@ -56,6 +56,19 @@ const navItems: { page: Page; label: string }[] = [
   { page: 'search', label: 'Search' },
   { page: 'settings', label: 'Settings' }
 ];
+const pageDescriptions: Record<Page, string> = {
+  dashboard: 'Plan the week, capture work, and see what changed recently.',
+  tasks: 'Track deadlines, blockers, reminders, and completed work.',
+  projects: 'Keep project stages, linked tasks, and progress in one place.',
+  knowledge: 'Save reusable notes, commands, and lessons learned.',
+  glossary: 'Build a practical vocabulary for manufacturing and data work.',
+  systems: 'Document important workflows, pipelines, and tools.',
+  troubleshooting: 'Turn errors and fixes into a searchable playbook.',
+  questions: 'Hold open questions until they become answers.',
+  weekly: 'Summarise learning, contribution, blockers, and next steps.',
+  search: 'Search across your local DayBook records.',
+  settings: 'Manage backups, appearance, reminders, import, and export.'
+};
 
 export default function App() {
   const [data, setData] = useState<DayBookData>(emptyData);
@@ -582,7 +595,10 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar" aria-label="Main features">
-        <div><h1>DayBook</h1></div>
+        <div className="brand">
+          <h1>DayBook</h1>
+          <p>Local work journal</p>
+        </div>
         <nav>
           {navItems.map((item) => (
             <button className={page === item.page ? 'active' : ''} type="button" key={item.page} onClick={() => setPage(item.page)}>
@@ -594,9 +610,9 @@ export default function App() {
 
       <main className="shell">
         <header className="topbar">
-          <div className={page === 'dashboard' ? 'no-margin' : ''}>
+          <div>
             <h1>{currentPage?.label}</h1>
-            {page === 'dashboard' ? <p className="pageSubhead">{todayLabel}</p> : null}
+            <p className="pageSubhead">{currentPage ? pageDescriptions[currentPage.page] : ''}</p>
           </div>
         </header>
 
@@ -653,25 +669,27 @@ function Dashboard({ data, today, todayLabel, projectsById, setPage, addCapture,
   const todayTasks = openTasks.filter((task) => task.dueAt.slice(0, 10) === today);
   const expiredTasks = openTasks.filter((task) => task.dueAt && new Date(task.dueAt).getTime() < Date.now());
   const currentWeekLog = data.weeklyLogs.find((log) => log.weekStart === formatDateInput(start));
+  const weekLabel = formatWeekRange(start, end);
   const dashboardStats = [
-    { key: 'today', label: 'Today', count: todayTasks.length, emoji: 'Today', onClick: () => setPage('tasks') },
-    { key: 'knowledge', label: 'Learned', count: data.notes.filter((note) => inWeek(note.createdAt)).length, emoji: 'Notes', onClick: () => setPage('knowledge') },
-    { key: 'solved', label: 'Solved', count: data.troubleshooting.filter((entry) => entry.dateResolved && inWeek(`${entry.dateResolved}T12:00:00`)).length, emoji: 'Fixes', onClick: () => setPage('troubleshooting') },
+    { key: 'today', label: 'Today', count: todayTasks.length, emoji: 'Due today', onClick: () => setPage('tasks') },
+    { key: 'knowledge', label: 'Notes', count: data.notes.filter((note) => inWeek(note.createdAt)).length, emoji: 'This week', onClick: () => setPage('knowledge') },
+    { key: 'solved', label: 'Fixes', count: data.troubleshooting.filter((entry) => entry.dateResolved && inWeek(`${entry.dateResolved}T12:00:00`)).length, emoji: 'This week', onClick: () => setPage('troubleshooting') },
     { key: 'questions', label: 'Questions', count: data.questions.filter((question) => question.status !== 'Answered').length, emoji: 'Open', onClick: () => setPage('questions') },
-    { key: 'expired', label: 'Expired', count: expiredTasks.length, emoji: 'Due', onClick: () => setPage('tasks') }
+    { key: 'expired', label: 'Overdue', count: expiredTasks.length, emoji: 'Needs action', onClick: () => setPage('tasks') }
   ];
   const recentTasks = [...data.tasks].sort((left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime());
 
   return (
     <>
-      <section className="summary dashboardSummary" aria-label="Current week">
+      <section className="weekHero" aria-label="Current week">
         <div>
-          <h2>Week of {formatDateInput(start)} to {formatDateInput(end)}</h2>
-          <p className="pageSubhead">{todayLabel}</p>
+          <p className="eyebrow">This week</p>
+          <h2>{weekLabel}</h2>
+          <p className="pageSubhead">Today: {todayLabel}</p>
         </div>
         <button type="button" onClick={() => setPage('weekly')}>{currentWeekLog ? 'Open weekly log' : 'Start weekly log'}</button>
       </section>
-      <section className="summary dashboardSummary">
+      <section className="statsBand">
         <div className="stats">
           {dashboardStats.map((item) => (
             <button className="statButton" type="button" key={item.key} onClick={item.onClick}>
@@ -966,7 +984,7 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
     <section className="grid">
       <QuestionForm title="Quick question" prefill={prefill} onSubmit={addQuestion} />
       <div className="notes">
-        <Panel title="Search questions">
+        <Panel title="Find an answer">
           <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
         </Panel>
         {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
@@ -1014,6 +1032,7 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
   updateSettings: (settings: AppSettings) => void;
   clearAllData: () => void;
 }) {
+  const localData = localDataSummary(data);
   return (
     <section className="grid">
       <Panel title="Notifications"><p>Allow browser notifications for local reminders while DayBook is open.</p><button type="button" onClick={enableNotifications}>Enable reminders</button></Panel>
@@ -1030,9 +1049,9 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
         </label>
       </Panel>
       <Panel title="Export"><p>Download a plain JSON backup for local storage or another device.</p><button type="button" onClick={exportJson}>Export JSON</button></Panel>
-      <Panel title="Auto backup"><p>Choose a JSON file in a Drive-synced folder. DayBook updates it after local data changes and again at 00:00 daily while the app is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
+      <Panel title="Auto backup"><p>Backs up after changes and daily at 00:00 while DayBook is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
       <Panel title="Import"><p>Import merges the selected DayBook JSON file into the current local data.</p><input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} /></Panel>
-      <Panel title="Local data"><p>{data.tasks.length} tasks, {data.notes.length} notes, {data.glossary.length} glossary terms, {data.weeklyLogs.length} weekly logs, {data.systems.length} systems, {data.troubleshooting.length} troubleshooting entries, {data.questions.length} questions, {data.captures.length} captures.</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
+      <Panel title="Local data"><p>{localData || 'No local records stored yet.'}</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
     </section>
   );
 }
@@ -1470,6 +1489,26 @@ export function taskMonth(task: Task) {
 
 export function listTaskMonths(tasks: Task[]) {
   return [...new Set(tasks.map(taskMonth).filter(Boolean))].sort((left, right) => right.localeCompare(left));
+}
+
+export function localDataSummary(data: DayBookData) {
+  const counts: [string, number][] = [
+    ['task', data.tasks.length],
+    ['knowledge note', data.notes.length],
+    ['glossary term', data.glossary.length],
+    ['weekly log', data.weeklyLogs.length],
+    ['system', data.systems.length],
+    ['troubleshooting entry', data.troubleshooting.length],
+    ['question', data.questions.length],
+    ['quick capture', data.captures.length]
+  ];
+  return counts.filter(([, count]) => count).map(([label, count]) => `${count} ${label}${count === 1 ? '' : 's'}`).join(', ');
+}
+
+export function formatWeekRange(start: Date, end: Date) {
+  const dayMonth = { day: 'numeric', month: 'short' } as const;
+  const withYear = { ...dayMonth, year: 'numeric' } as const;
+  return `${start.toLocaleDateString('en-GB', dayMonth)} - ${end.toLocaleDateString('en-GB', withYear)}`;
 }
 
 function formatMonthLabel(value: string) {
