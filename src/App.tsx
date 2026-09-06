@@ -865,9 +865,8 @@ function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
         <div className="notes">
           {visible.length === 0 ? <p className="empty">{glossary.length === 0 ? 'No glossary terms yet.' : 'No matching terms.'}</p> : visible.map((entry) => (
             <article className="card" key={entry.id}>
-              <div className="cardHead"><h3>{entry.term}</h3><button type="button" onClick={() => deleteGlossary(entry)}>Delete</button></div>
-              <DetailBlock label="Meaning" value={entry.meaning} />
-              {entry.context ? <DetailBlock label="Where it appears" value={entry.context} /> : null}
+              <div className="cardHead"><h3>{glossaryTitle(entry)}</h3><button type="button" onClick={() => deleteGlossary(entry)}>Delete</button></div>
+              {entry.context ? <details><summary>View details</summary><DetailBlock label="Details" value={entry.context} /></details> : null}
             </article>
           ))}
         </div>
@@ -1087,7 +1086,7 @@ function GlossaryForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElemen
       <h2>Add glossary term</h2>
       <label>Term<input name="term" required placeholder="Yield, SPC, lot..." /></label>
       <label>Meaning<textarea name="meaning" rows={3} required placeholder="Plain-language meaning" /></label>
-      <label>Where it appears<textarea name="context" rows={3} placeholder="Process, machine, report, dataset..." /></label>
+      <label>Details<textarea name="context" rows={3} placeholder="From panel ID and coordinates" /></label>
       <button type="submit">Save term</button>
     </form>
   );
@@ -1511,6 +1510,10 @@ export function formatWeekRange(start: Date, end: Date) {
   const dayMonth = { day: 'numeric', month: 'short' } as const;
   const withYear = { ...dayMonth, year: 'numeric' } as const;
   return `${start.toLocaleDateString('en-GB', dayMonth)} - ${end.toLocaleDateString('en-GB', withYear)}`;
+}
+
+export function glossaryTitle(entry: GlossaryEntry) {
+  return `${entry.term} : ${entry.meaning}`;
 }
 
 function formatMonthLabel(value: string) {

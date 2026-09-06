@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWeekRange, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
+import { formatWeekRange, glossaryTitle, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
 import type { DayBookData, Task } from './types';
 
 function makeTask(overrides: Partial<Task>): Task {
@@ -106,5 +106,11 @@ describe('local data summary', () => {
 describe('week range label', () => {
   it('keeps the dashboard week label compact', () => {
     expect(formatWeekRange(new Date(2026, 7, 31), new Date(2026, 8, 6))).toBe('31 Aug - 6 Sept 2026');
+  });
+});
+
+describe('glossary title', () => {
+  it('shows term and meaning together', () => {
+    expect(glossaryTitle({ ...data.glossary[0], term: 'DMC', meaning: 'Device ID' })).toBe('DMC : Device ID');
   });
 });

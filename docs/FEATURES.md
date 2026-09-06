@@ -95,7 +95,9 @@ Help a new manufacturing data scientist build domain vocabulary.
 Each glossary term contains:
 - Term
 - Meaning
-- Where it appears
+- Details
+
+Saved glossary terms should collapse by default and show `Term : Meaning`.
 
 ---
 
