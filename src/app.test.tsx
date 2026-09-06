@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatWeekRange, glossaryTitle, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
+import { formatWeekRange, glossaryTitle, groupGlossary, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
 import type { DayBookData, Task } from './types';
 
 function makeTask(overrides: Partial<Task>): Task {
@@ -112,5 +112,19 @@ describe('week range label', () => {
 describe('glossary title', () => {
   it('shows term and meaning together', () => {
     expect(glossaryTitle({ ...data.glossary[0], term: 'DMC', meaning: 'Device ID' })).toBe('DMC : Device ID');
+  });
+
+  it('groups terms alphabetically', () => {
+    const groups = groupGlossary([
+      { ...data.glossary[0], id: 'yield', term: 'Yield' },
+      { ...data.glossary[0], id: 'dmc', term: 'DMC', meaning: 'Device ID' },
+      { ...data.glossary[0], id: '8d', term: '8D' }
+    ]);
+
+    expect(groups.map(([letter, entries]) => [letter, entries.map((entry) => entry.term)])).toEqual([
+      ['#', ['8D']],
+      ['D', ['DMC']],
+      ['Y', ['Yield']]
+    ]);
   });
 });

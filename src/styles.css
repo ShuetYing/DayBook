@@ -756,6 +756,85 @@ button:focus-visible {
   font-weight: 800;
 }
 
+.glossaryJump {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.glossaryJump a {
+  min-width: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--accent);
+  padding: 0.22rem 0.5rem;
+  text-align: center;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.glossaryList,
+.glossaryGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.glossaryGroup {
+  scroll-margin-top: 18px;
+}
+
+.glossaryGroup h2 {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+}
+
+.glossaryRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: start;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.glossaryRow details {
+  min-width: 0;
+  margin: 0;
+}
+
+.glossaryRow summary {
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+}
+
+.glossaryRow summary span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.glossaryRow button {
+  align-self: center;
+  margin-right: 0.45rem;
+  padding: 0.35rem 0.55rem;
+  background: transparent;
+  color: var(--accent);
+}
+
+.glossaryRow .detailBlock,
+.glossaryRow .empty {
+  padding: 0 0.65rem 0.65rem;
+}
+
 .stageFields {
   display: grid;
   gap: 12px;

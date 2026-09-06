@@ -97,7 +97,8 @@ Each glossary term contains:
 - Meaning
 - Details
 
-Saved glossary terms should collapse by default and show `Term : Meaning`.
+Saved glossary terms should be sorted and grouped alphabetically.
+Saved glossary terms should collapse by default and show one compact `Term : Meaning` row.
 
 ---
 

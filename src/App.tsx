@@ -856,18 +856,29 @@ function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
   deleteGlossary: (entry: GlossaryEntry) => void;
 }) {
   const [query, setQuery] = useState('');
-  const visible = filterList(glossary, query, (entry) => [entry.term, entry.meaning, entry.context]);
+  const groups = groupGlossary(filterList(glossary, query, (entry) => [entry.term, entry.meaning, entry.context]));
   return (
     <section className="grid">
       <GlossaryForm onSubmit={addGlossary} />
       <div>
         <label className="search">Search glossary<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="yield, lot, SPC..." /></label>
-        <div className="notes">
-          {visible.length === 0 ? <p className="empty">{glossary.length === 0 ? 'No glossary terms yet.' : 'No matching terms.'}</p> : visible.map((entry) => (
-            <article className="card" key={entry.id}>
-              <div className="cardHead"><h3>{glossaryTitle(entry)}</h3><button type="button" onClick={() => deleteGlossary(entry)}>Delete</button></div>
-              {entry.context ? <details><summary>View details</summary><DetailBlock label="Details" value={entry.context} /></details> : null}
-            </article>
+        <div className="glossaryJump">
+          {groups.map(([letter]) => <a href={`#glossary-${letter}`} key={letter}>{letter}</a>)}
+        </div>
+        <div className="glossaryList">
+          {groups.length === 0 ? <p className="empty">{glossary.length === 0 ? 'No glossary terms yet.' : 'No matching terms.'}</p> : groups.map(([letter, entries]) => (
+            <section className="glossaryGroup" id={`glossary-${letter}`} key={letter}>
+              <h2>{letter}</h2>
+              {entries.map((entry) => (
+                <article className="glossaryRow" key={entry.id}>
+                  <details>
+                    <summary><span>{glossaryTitle(entry)}</span></summary>
+                    {entry.context ? <DetailBlock label="Details" value={entry.context} /> : <p className="empty">No details yet.</p>}
+                  </details>
+                  <button type="button" onClick={() => deleteGlossary(entry)}>Delete</button>
+                </article>
+              ))}
+            </section>
           ))}
         </div>
       </div>
@@ -1514,6 +1525,17 @@ export function formatWeekRange(start: Date, end: Date) {
 
 export function glossaryTitle(entry: GlossaryEntry) {
   return `${entry.term} : ${entry.meaning}`;
+}
+
+export function groupGlossary(glossary: GlossaryEntry[]): [string, GlossaryEntry[]][] {
+  const sorted = [...glossary].sort((left, right) => left.term.localeCompare(right.term));
+  const groups = new Map<string, GlossaryEntry[]>();
+  sorted.forEach((entry) => {
+    const letter = (entry.term.trim()[0] || '#').toUpperCase();
+    const key = /[A-Z]/.test(letter) ? letter : '#';
+    groups.set(key, [...(groups.get(key) ?? []), entry]);
+  });
+  return [...groups.entries()];
 }
 
 function formatMonthLabel(value: string) {
