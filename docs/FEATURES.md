@@ -224,6 +224,8 @@ Supported statuses:
 - Need to ask
 - Answered
 
+Saved questions should collapse by default and show the question plus status first.
+
 ---
 
 ## Global Search

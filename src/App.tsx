@@ -41,7 +41,7 @@ const emptyData: DayBookData = {
   glossary: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
-const standardNoteTemplate = 'Summary\n_____________________________\n\nContext\n_____________________________\n\nDetails\n_____________________________\n\nExample / Command\n';
+const standardNoteTemplate = 'Summary\n\n___________________________________________________________________\n\nContext\n\n___________________________________________________________________\n\nDetails\n\n___________________________________________________________________\n\nExample / Command\n';
 const presetTags = ['pipeline', 'debugging', 'sql', 'python', 'database', 'cloud', 'manufacturing', 'process', 'system', 'troubleshooting'];
 const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
@@ -834,14 +834,14 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
       </form>
       <div>
         <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, process, error..." /></label>
-        <div className="notes">
+        <div className="compactRows">
           {visibleNotes.length === 0 ? null : visibleNotes.map((note) => (
-            <article className="card" key={note.id}>
-              <div className="cardHead">
-                <div><h3>{note.title}</h3><Meta tags={note.tags} /></div>
-                <button type="button" onClick={() => deleteNote(note)}>Delete</button>
-              </div>
-              <details><summary>View note</summary><p className="preline">{note.body}</p></details>
+            <article className="compactRow" key={note.id}>
+              <details>
+                <summary><span>{note.title}</span><Meta tags={note.tags} /></summary>
+                <p className="preline">{note.body}</p>
+              </details>
+              <button type="button" onClick={() => deleteNote(note)}>Delete</button>
             </article>
           ))}
         </div>
@@ -870,7 +870,7 @@ function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
             <section className="glossaryGroup" id={`glossary-${letter}`} key={letter}>
               <h2>{letter}</h2>
               {entries.map((entry) => (
-                <article className="glossaryRow" key={entry.id}>
+                <article className="compactRow" key={entry.id}>
                   <details>
                     <summary><span>{glossaryTitle(entry)}</span></summary>
                     {entry.context ? <DetailBlock label="Details" value={entry.context} /> : <p className="empty">No details yet.</p>}
@@ -1000,11 +1000,14 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
           <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
         </Panel>
         {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
-          <article className="card" key={question.id}>
-            <div className="cardHead"><h3>{question.question}</h3><button type="button" onClick={() => deleteQuestion(question)}>Delete</button></div>
-            <p><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span> {question.relatedSystem}</p>
-            <p className="preline">{question.notes}</p>
-            <details><summary>Edit</summary><QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} /></details>
+          <article className="compactRow" key={question.id}>
+            <details>
+              <summary><span>{question.question}</span><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></summary>
+              {question.relatedSystem ? <DetailBlock label="Related system" value={question.relatedSystem} /> : null}
+              {question.notes ? <DetailBlock label="Notes / answer" value={question.notes} /> : null}
+              <QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} />
+            </details>
+            <button type="button" onClick={() => deleteQuestion(question)}>Delete</button>
           </article>
         ))}
       </div>

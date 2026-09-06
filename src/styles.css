@@ -776,7 +776,8 @@ button:focus-visible {
 }
 
 .glossaryList,
-.glossaryGroup {
+.glossaryGroup,
+.compactRows {
   display: grid;
   gap: 8px;
 }
@@ -792,7 +793,7 @@ button:focus-visible {
   letter-spacing: 0.08em;
 }
 
-.glossaryRow {
+.compactRow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
@@ -804,17 +805,20 @@ button:focus-visible {
   box-shadow: var(--shadow);
 }
 
-.glossaryRow details {
+.compactRow details {
   min-width: 0;
   margin: 0;
 }
 
-.glossaryRow summary {
+.compactRow summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
   min-height: 44px;
   padding: 0.5rem 0.65rem;
 }
 
-.glossaryRow summary span {
+.compactRow summary span:first-child {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -822,7 +826,7 @@ button:focus-visible {
   font-weight: 700;
 }
 
-.glossaryRow button {
+.compactRow button {
   align-self: center;
   margin-right: 0.45rem;
   padding: 0.35rem 0.55rem;
@@ -830,8 +834,10 @@ button:focus-visible {
   color: var(--accent);
 }
 
-.glossaryRow .detailBlock,
-.glossaryRow .empty {
+.compactRow .detailBlock,
+.compactRow .empty,
+.compactRow .preline,
+.compactRow form {
   padding: 0 0.65rem 0.65rem;
 }
 
