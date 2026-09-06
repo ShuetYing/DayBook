@@ -120,7 +120,7 @@ Notes should:
 - Allow custom tags.
 - Be searchable by title, body and tags.
 - Collapse saved note bodies by default and show only the title first.
-- Show note details, tags, and edit/delete icon actions only from the expanded row.
+- Open a selected saved note in a full note reader with tags and edit/delete icon actions.
 
 Recommended default tags:
 - pipeline

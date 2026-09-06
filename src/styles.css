@@ -426,6 +426,13 @@ h3 {
   align-items: start;
 }
 
+.knowledgeLayout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.35fr);
+  gap: 16px;
+  align-items: start;
+}
+
 .dashboardGrid {
   grid-template-areas:
     "capture overview"
@@ -873,6 +880,29 @@ button:focus-visible {
   line-height: 1;
 }
 
+.noteTitleButton {
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.65rem;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  font-weight: 700;
+}
+
+.noteTitleButton.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.noteReader {
+  min-height: 420px;
+}
+
+.noteReader .rowActions {
+  padding: 0;
+}
+
 .inlineEdit {
   margin: 0 0.65rem 0.65rem;
   border-top: 1px solid var(--border);
@@ -982,6 +1012,7 @@ summary {
   .topbar,
   .weekHero,
   .grid,
+  .knowledgeLayout,
   .dashboardGrid,
   .columns,
   .rowPanel {

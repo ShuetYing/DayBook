@@ -848,30 +848,36 @@ function KnowledgePage({ notes, prefill, addNote, updateNote, deleteNote }: {
 }) {
   const [noteQuery, setNoteQuery] = useState('');
   const [editingNoteId, setEditingNoteId] = useState('');
+  const [selectedNoteId, setSelectedNoteId] = useState('');
   const query = noteQuery.toLowerCase();
   const visibleNotes = notes.filter((note) => [note.title, note.body, note.tags.join(' ')].join(' ').toLowerCase().includes(query));
+  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? visibleNotes[0];
   return (
-    <section className="grid">
-      <KnowledgeForm title="Add knowledge note" prefill={prefill} onSubmit={addNote} />
-      <div>
+    <section className="knowledgeLayout">
+      <div className="stack">
+        <KnowledgeForm title="Add knowledge note" prefill={prefill} onSubmit={addNote} />
         <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, process, error..." /></label>
         <div className="compactRows">
-          {visibleNotes.length === 0 ? null : visibleNotes.map((note) => (
+          {visibleNotes.length === 0 ? <p className="empty">{notes.length === 0 ? 'No knowledge notes yet.' : 'No matching notes.'}</p> : visibleNotes.map((note) => (
             <article className="compactRow" key={note.id}>
-              <details>
-                <summary><span>{note.title}</span></summary>
-                <div className="rowActions">
-                  <button type="button" className="iconButton" aria-label={`Edit ${note.title}`} onClick={() => setEditingNoteId((current) => current === note.id ? '' : note.id)}>✎</button>
-                  <button type="button" aria-label={`Delete ${note.title}`} onClick={() => deleteNote(note)}>×</button>
-                </div>
-                <Meta tags={note.tags} />
-                <p className="preline">{note.body}</p>
-                {editingNoteId === note.id ? <KnowledgeForm title="Edit note" note={note} onSubmit={(event) => updateNote(event, note.id)} /> : null}
-              </details>
+              <button type="button" className={`noteTitleButton ${selectedNote?.id === note.id ? 'active' : ''}`} onClick={() => { setSelectedNoteId(note.id); setEditingNoteId(''); }}>{note.title}</button>
             </article>
           ))}
         </div>
       </div>
+      {selectedNote ? (
+        <article className="panel noteReader">
+          <div className="cardHead">
+            <h2>{selectedNote.title}</h2>
+            <div className="rowActions">
+              <button type="button" className="iconButton" aria-label={`Edit ${selectedNote.title}`} onClick={() => setEditingNoteId((current) => current === selectedNote.id ? '' : selectedNote.id)}>✎</button>
+              <button type="button" aria-label={`Delete ${selectedNote.title}`} onClick={() => { deleteNote(selectedNote); setSelectedNoteId(''); }}>×</button>
+            </div>
+          </div>
+          <Meta tags={selectedNote.tags} />
+          {editingNoteId === selectedNote.id ? <KnowledgeForm title="Edit note" note={selectedNote} onSubmit={(event) => updateNote(event, selectedNote.id)} /> : <p className="preline">{selectedNote.body}</p>}
+        </article>
+      ) : null}
     </section>
   );
 }
