@@ -338,6 +338,20 @@ export default function App() {
     flashMessage(`Knowledge note deleted: ${note.title}`);
   }
 
+  function updateNote(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    const body = String(form.get('body') || '').trim();
+    if (!title || !body) return;
+    updateData((current, now) => ({
+      ...current,
+      notes: current.notes.map((note) => note.id === id ? { ...note, title, body, tags: parseTags(String(form.get('tags') || '')), updatedAt: now } : note),
+      activities: withActivity(current, `Updated knowledge note: ${title}`, now)
+    }));
+    flashMessage(`Knowledge note updated: ${title}`);
+  }
+
   function addGlossary(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const entry = glossaryFromForm(new FormData(event.currentTarget), new Date().toISOString());
@@ -349,6 +363,18 @@ export default function App() {
     }));
     flashMessage(`Glossary term saved: ${entry.term}`);
     event.currentTarget.reset();
+  }
+
+  function updateGlossary(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const entry = glossaryFromForm(new FormData(event.currentTarget), new Date().toISOString());
+    if (!entry.term || !entry.meaning) return;
+    updateData((current, now) => ({
+      ...current,
+      glossary: current.glossary.map((item) => item.id === id ? { ...item, ...entry, createdAt: item.createdAt, updatedAt: now } : item),
+      activities: withActivity(current, `Updated glossary term: ${entry.term}`, now)
+    }));
+    flashMessage(`Glossary term updated: ${entry.term}`);
   }
 
   function deleteGlossary(entry: GlossaryEntry) {
@@ -636,8 +662,8 @@ export default function App() {
         )}
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
         {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
-        {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} deleteNote={deleteNote} />}
-        {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} deleteGlossary={deleteGlossary} />}
+        {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} updateNote={updateNote} deleteNote={deleteNote} />}
+        {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
         {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
         {page === 'systems' && <SystemsPage systems={data.systems} addSystem={addSystem} updateSystem={updateSystem} deleteSystem={deleteSystem} />}
         {page === 'troubleshooting' && <TroubleshootingPage entries={data.troubleshooting} prefill={prefill.troubleshooting} addTroubleshooting={addTroubleshooting} updateTroubleshooting={updateTroubleshooting} deleteTroubleshooting={deleteTroubleshooting} />}
@@ -813,10 +839,11 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
   );
 }
 
-function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
+function KnowledgePage({ notes, prefill, addNote, updateNote, deleteNote }: {
   notes: Note[];
   prefill?: string;
   addNote: (event: FormEvent<HTMLFormElement>) => void;
+  updateNote: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteNote: (note: Note) => void;
 }) {
   const [noteQuery, setNoteQuery] = useState('');
@@ -824,14 +851,7 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
   const visibleNotes = notes.filter((note) => [note.title, note.body, note.tags.join(' ')].join(' ').toLowerCase().includes(query));
   return (
     <section className="grid">
-      <form className="panel" onSubmit={addNote} key={prefill ?? 'knowledge'}>
-        <h2>Add knowledge note</h2>
-        <label>Title<input name="title" placeholder="Pipeline trigger mechanism" required /></label>
-        <label>Tags<input name="tags" list="note-tags" placeholder="pipeline, sql" /></label>
-        <label>Note<textarea name="body" rows={12} required defaultValue={prefill ? `${prefill}\n\n${standardNoteTemplate}` : standardNoteTemplate} /></label>
-        <datalist id="note-tags">{presetTags.map((tag) => <option key={tag} value={tag} />)}</datalist>
-        <button type="submit">Save note</button>
-      </form>
+      <KnowledgeForm title="Add knowledge note" prefill={prefill} onSubmit={addNote} />
       <div>
         <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, process, error..." /></label>
         <div className="compactRows">
@@ -840,6 +860,7 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
               <details>
                 <summary><span>{note.title}</span><Meta tags={note.tags} /></summary>
                 <p className="preline">{note.body}</p>
+                <details className="inlineEdit"><summary>Edit</summary><KnowledgeForm title="Edit note" note={note} onSubmit={(event) => updateNote(event, note.id)} /></details>
               </details>
               <button type="button" onClick={() => deleteNote(note)}>Delete</button>
             </article>
@@ -850,9 +871,10 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
   );
 }
 
-function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
+function GlossaryPage({ glossary, addGlossary, updateGlossary, deleteGlossary }: {
   glossary: GlossaryEntry[];
   addGlossary: (event: FormEvent<HTMLFormElement>) => void;
+  updateGlossary: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteGlossary: (entry: GlossaryEntry) => void;
 }) {
   const [query, setQuery] = useState('');
@@ -874,6 +896,7 @@ function GlossaryPage({ glossary, addGlossary, deleteGlossary }: {
                   <details>
                     <summary><span>{glossaryTitle(entry)}</span></summary>
                     {entry.context ? <DetailBlock label="Details" value={entry.context} /> : <p className="empty">No details yet.</p>}
+                    <details className="inlineEdit"><summary>Edit</summary><GlossaryForm title="Edit glossary term" entry={entry} onSubmit={(event) => updateGlossary(event, entry.id)} /></details>
                   </details>
                   <button type="button" onClick={() => deleteGlossary(entry)}>Delete</button>
                 </article>
@@ -1005,7 +1028,7 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
               <summary><span>{question.question}</span><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></summary>
               {question.relatedSystem ? <DetailBlock label="Related system" value={question.relatedSystem} /> : null}
               {question.notes ? <DetailBlock label="Notes / answer" value={question.notes} /> : null}
-              <QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} />
+              <details className="inlineEdit"><summary>Edit</summary><QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} compact /></details>
             </details>
             <button type="button" onClick={() => deleteQuestion(question)}>Delete</button>
           </article>
@@ -1094,14 +1117,27 @@ function TaskForm({ title, task, projects, onSubmit, onCancel }: {
   );
 }
 
-function GlossaryForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function KnowledgeForm({ title, note, prefill, onSubmit }: { title: string; note?: Note; prefill?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
   return (
-    <form className="panel" onSubmit={onSubmit}>
-      <h2>Add glossary term</h2>
-      <label>Term<input name="term" required placeholder="Yield, SPC, lot..." /></label>
-      <label>Meaning<textarea name="meaning" rows={3} required placeholder="Plain-language meaning" /></label>
-      <label>Details<textarea name="context" rows={3} placeholder="From panel ID and coordinates" /></label>
-      <button type="submit">Save term</button>
+    <form className={note ? 'inlineEditForm' : 'panel'} onSubmit={onSubmit} key={prefill ?? note?.id ?? 'knowledge'}>
+      <h2>{title}</h2>
+      <label>Title<input name="title" placeholder="Pipeline trigger mechanism" required defaultValue={note?.title} /></label>
+      <label>Tags<input name="tags" list="note-tags" placeholder="pipeline, sql" defaultValue={note?.tags.join(', ')} /></label>
+      <label>Note<textarea name="body" rows={note ? 8 : 12} required defaultValue={note?.body ?? (prefill ? `${prefill}\n\n${standardNoteTemplate}` : standardNoteTemplate)} /></label>
+      <datalist id="note-tags">{presetTags.map((tag) => <option key={tag} value={tag} />)}</datalist>
+      <button type="submit">{note ? 'Save changes' : 'Save note'}</button>
+    </form>
+  );
+}
+
+function GlossaryForm({ title = 'Add glossary term', entry, onSubmit }: { title?: string; entry?: GlossaryEntry; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className={entry ? 'inlineEditForm' : 'panel'} onSubmit={onSubmit}>
+      <h2>{title}</h2>
+      <label>Term<input name="term" required placeholder="Yield, SPC, lot..." defaultValue={entry?.term} /></label>
+      <label>Meaning<textarea name="meaning" rows={3} required placeholder="Plain-language meaning" defaultValue={entry?.meaning} /></label>
+      <label>Details<textarea name="context" rows={3} placeholder="From panel ID and coordinates" defaultValue={entry?.context} /></label>
+      <button type="submit">{entry ? 'Save changes' : 'Save term'}</button>
     </form>
   );
 }
@@ -1204,15 +1240,15 @@ function TroubleshootingForm({ title, entry, prefill, onSubmit }: { title: strin
   );
 }
 
-function QuestionForm({ title, question, prefill, onSubmit }: { title: string; question?: QuestionEntry; prefill?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+function QuestionForm({ title, question, prefill, onSubmit, compact = false }: { title: string; question?: QuestionEntry; prefill?: string; onSubmit: (event: FormEvent<HTMLFormElement>) => void; compact?: boolean }) {
   return (
-    <form className="panel" onSubmit={onSubmit} key={prefill ?? question?.id ?? 'question'}>
+    <form className={compact ? 'inlineEditForm' : 'panel'} onSubmit={onSubmit} key={prefill ?? question?.id ?? 'question'}>
       <h2>{title}</h2>
       <label>Question<input name="question" required defaultValue={question?.question ?? prefill} placeholder="Who owns this table?" /></label>
       <label>Status<select name="status" defaultValue={question?.status ?? 'Open'}><option>Open</option><option>Investigating</option><option>Need to ask</option><option>Answered</option></select></label>
       <label>Related system<input name="relatedSystem" defaultValue={question?.relatedSystem} /></label>
       <label>Notes / answer<textarea name="notes" rows={5} defaultValue={question?.notes} /></label>
-      <button type="submit">{question ? 'Save question' : 'Create question'}</button>
+      <button type="submit">{question ? 'Save changes' : 'Create question'}</button>
     </form>
   );
 }

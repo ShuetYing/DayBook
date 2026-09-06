@@ -836,9 +836,38 @@ button:focus-visible {
 
 .compactRow .detailBlock,
 .compactRow .empty,
-.compactRow .preline,
-.compactRow form {
+.compactRow .preline {
   padding: 0 0.65rem 0.65rem;
+}
+
+.inlineEdit {
+  margin: 0 0.65rem 0.65rem;
+  border-top: 1px solid var(--border);
+}
+
+.inlineEdit > summary {
+  min-height: 36px;
+  padding-inline: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.inlineEditForm {
+  display: grid;
+  gap: 10px;
+  padding: 0.65rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.inlineEditForm h2 {
+  margin-bottom: 0;
+  font-size: 1rem;
+}
+
+.inlineEditForm label {
+  margin-bottom: 0;
 }
 
 .stageFields {

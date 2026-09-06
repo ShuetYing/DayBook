@@ -99,6 +99,7 @@ Each glossary term contains:
 
 Saved glossary terms should be sorted and grouped alphabetically.
 Saved glossary terms should collapse by default and show one compact `Term : Meaning` row.
+Saved glossary terms should be editable from the expanded row.
 
 ---
 
@@ -119,6 +120,7 @@ Notes should:
 - Allow custom tags.
 - Be searchable by title, body and tags.
 - Collapse saved note bodies by default and show title plus tags first.
+- Allow saved notes to be edited from the expanded row.
 
 Recommended default tags:
 - pipeline
@@ -225,6 +227,7 @@ Supported statuses:
 - Answered
 
 Saved questions should collapse by default and show the question plus status first.
+Saved questions should show a compact edit form from the expanded row.
 
 ---
 
