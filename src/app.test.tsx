@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { formatWeekRange, glossaryTitle, groupGlossary, listTaskMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, searchData, serializeProjectTimeline, taskMonth } from './App';
-import type { DayBookData, Task } from './types';
+import { formatWeekRange, glossaryTitle, groupGlossary, listTaskMonths, listWeeklyLogMonths, localDataSummary, msUntilNextBackup, parseProjectTimeline, questionPreview, searchData, serializeProjectTimeline, taskMonth, weeklyLogTitle } from './App';
+import type { DayBookData, Task, WeeklyLog } from './types';
 
 function makeTask(overrides: Partial<Task>): Task {
   return {
@@ -40,6 +40,24 @@ const data: DayBookData = {
   }],
   settings: { theme: 'mint', density: 'comfortable' }
 };
+
+function makeWeeklyLog(overrides: Partial<WeeklyLog>): WeeklyLog {
+  return {
+    id: 'log-1',
+    weekStart: '2026-08-31',
+    learned: '',
+    workedOn: '',
+    blockers: '',
+    solved: '',
+    impact: '',
+    openQuestions: '',
+    nextWeek: '',
+    tags: [],
+    createdAt: '2026-09-04T08:00:00.000Z',
+    updatedAt: '2026-09-04T08:00:00.000Z',
+    ...overrides
+  };
+}
 
 describe('completed task month helpers', () => {
   it('uses updatedAt as the completed month', () => {
@@ -107,6 +125,18 @@ describe('week range label', () => {
   it('keeps the dashboard week label compact', () => {
     expect(formatWeekRange(new Date(2026, 7, 31), new Date(2026, 8, 6))).toBe('31 Aug - 6 Sept 2026');
   });
+
+  it('shows saved weekly logs as a work-week range', () => {
+    expect(weeklyLogTitle(makeWeeklyLog({ weekStart: '2026-08-31' }))).toBe('Week of 2026-08-31 to 2026-09-04');
+  });
+
+  it('lists weekly log months newest first', () => {
+    expect(listWeeklyLogMonths([
+      makeWeeklyLog({ id: 'a', weekStart: '2026-07-06' }),
+      makeWeeklyLog({ id: 'b', weekStart: '2026-09-07' }),
+      makeWeeklyLog({ id: 'c', weekStart: '2026-07-13' })
+    ])).toEqual(['2026-09', '2026-07']);
+  });
 });
 
 describe('glossary title', () => {
@@ -126,5 +156,15 @@ describe('glossary title', () => {
       ['D', ['DMC']],
       ['Y', ['Yield']]
     ]);
+  });
+});
+
+describe('question preview', () => {
+  it('shows the answer when one exists', () => {
+    expect(questionPreview({ id: 'q1', question: 'What is DMC?', status: 'Answered', relatedSystem: '', relatedKnowledge: '', notes: 'Device ID', createdAt: '', updatedAt: '' })).toBe('Device ID');
+  });
+
+  it('shows an empty-state answer', () => {
+    expect(questionPreview({ id: 'q1', question: 'What is DMC?', status: 'Open', relatedSystem: '', relatedKnowledge: '', notes: '', createdAt: '', updatedAt: '' })).toBe('No answer yet');
   });
 });

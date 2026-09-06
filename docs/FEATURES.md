@@ -99,7 +99,7 @@ Each glossary term contains:
 
 Saved glossary terms should be sorted and grouped alphabetically.
 Saved glossary terms should collapse by default and show one compact `Term : Meaning` row.
-Saved glossary terms should be editable from the expanded row.
+Saved glossary terms should show edit and delete icon actions only from the expanded row.
 
 ---
 
@@ -119,8 +119,8 @@ Notes should:
 - Use tags as the main organisation method.
 - Allow custom tags.
 - Be searchable by title, body and tags.
-- Collapse saved note bodies by default and show title plus tags first.
-- Allow saved notes to be edited from the expanded row.
+- Collapse saved note bodies by default and show only the title first.
+- Show note details, tags, and edit/delete icon actions only from the expanded row.
 
 Recommended default tags:
 - pipeline
@@ -156,6 +156,8 @@ Each weekly log contains:
 
 Each section can contain multiple entries as plain text.
 Weekly logs are editable after creation.
+Saved weekly logs display as a Monday-to-Friday work-week range, such as `Week of 2026-08-31 to 2026-09-04`.
+Saved weekly logs can be filtered by month or by a specific week.
 The Generate Weekly Review Draft action uses local records created or updated during the selected week and remains editable before saving.
 If DayBook is open on Friday at or after 3pm and no log exists for that week, show a local reminder once for that week.
 
@@ -220,14 +222,14 @@ Each question contains:
 - Notes / answer
 - Date created
 
+Saved questions should collapse by default and show the question plus answer preview.
+Saved questions should show edit and delete icon actions only from the expanded row.
+
 Supported statuses:
 - Open
 - Investigating
 - Need to ask
 - Answered
-
-Saved questions should collapse by default and show the question plus status first.
-Saved questions should show a compact edit form from the expanded row.
 
 ---
 

@@ -847,6 +847,7 @@ function KnowledgePage({ notes, prefill, addNote, updateNote, deleteNote }: {
   deleteNote: (note: Note) => void;
 }) {
   const [noteQuery, setNoteQuery] = useState('');
+  const [editingNoteId, setEditingNoteId] = useState('');
   const query = noteQuery.toLowerCase();
   const visibleNotes = notes.filter((note) => [note.title, note.body, note.tags.join(' ')].join(' ').toLowerCase().includes(query));
   return (
@@ -858,11 +859,15 @@ function KnowledgePage({ notes, prefill, addNote, updateNote, deleteNote }: {
           {visibleNotes.length === 0 ? null : visibleNotes.map((note) => (
             <article className="compactRow" key={note.id}>
               <details>
-                <summary><span>{note.title}</span><Meta tags={note.tags} /></summary>
+                <summary><span>{note.title}</span></summary>
+                <div className="rowActions">
+                  <button type="button" className="iconButton" aria-label={`Edit ${note.title}`} onClick={() => setEditingNoteId((current) => current === note.id ? '' : note.id)}>✎</button>
+                  <button type="button" aria-label={`Delete ${note.title}`} onClick={() => deleteNote(note)}>×</button>
+                </div>
+                <Meta tags={note.tags} />
                 <p className="preline">{note.body}</p>
-                <details className="inlineEdit"><summary>Edit</summary><KnowledgeForm title="Edit note" note={note} onSubmit={(event) => updateNote(event, note.id)} /></details>
+                {editingNoteId === note.id ? <KnowledgeForm title="Edit note" note={note} onSubmit={(event) => updateNote(event, note.id)} /> : null}
               </details>
-              <button type="button" onClick={() => deleteNote(note)}>Delete</button>
             </article>
           ))}
         </div>
@@ -878,6 +883,7 @@ function GlossaryPage({ glossary, addGlossary, updateGlossary, deleteGlossary }:
   deleteGlossary: (entry: GlossaryEntry) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [editingGlossaryId, setEditingGlossaryId] = useState('');
   const groups = groupGlossary(filterList(glossary, query, (entry) => [entry.term, entry.meaning, entry.context]));
   return (
     <section className="grid">
@@ -895,10 +901,13 @@ function GlossaryPage({ glossary, addGlossary, updateGlossary, deleteGlossary }:
                 <article className="compactRow" key={entry.id}>
                   <details>
                     <summary><span>{glossaryTitle(entry)}</span></summary>
+                    <div className="rowActions">
+                      <button type="button" className="iconButton" aria-label={`Edit ${entry.term}`} onClick={() => setEditingGlossaryId((current) => current === entry.id ? '' : entry.id)}>✎</button>
+                      <button type="button" aria-label={`Delete ${entry.term}`} onClick={() => deleteGlossary(entry)}>×</button>
+                    </div>
                     {entry.context ? <DetailBlock label="Details" value={entry.context} /> : <p className="empty">No details yet.</p>}
-                    <details className="inlineEdit"><summary>Edit</summary><GlossaryForm title="Edit glossary term" entry={entry} onSubmit={(event) => updateGlossary(event, entry.id)} /></details>
+                    {editingGlossaryId === entry.id ? <GlossaryForm title="Edit glossary term" entry={entry} onSubmit={(event) => updateGlossary(event, entry.id)} /> : null}
                   </details>
-                  <button type="button" onClick={() => deleteGlossary(entry)}>Delete</button>
                 </article>
               ))}
             </section>
@@ -919,6 +928,15 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
   deleteWeeklyLog: (log: WeeklyLog) => void;
   generateDraft: () => void;
 }) {
+  const [monthFilter, setMonthFilter] = useState('');
+  const [weekFilter, setWeekFilter] = useState('');
+  const selectedWeekStart = weekFilter ? formatDateInput(getWeekBounds(new Date(`${weekFilter}T12:00:00`)).start) : '';
+  const monthOptions = listWeeklyLogMonths(data.weeklyLogs);
+  const visibleLogs = data.weeklyLogs.filter((log) => (!monthFilter || log.weekStart.startsWith(monthFilter)) && (!selectedWeekStart || log.weekStart === selectedWeekStart));
+  const editLog = (log: WeeklyLog) => {
+    setWeekDate(log.weekStart);
+    setDraft(log);
+  };
   return (
     <section className="stack">
       <form className="panel" onSubmit={saveWeeklyLog}>
@@ -926,7 +944,7 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
           <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
           <button type="button" onClick={generateDraft}>Generate Weekly Review Draft</button>
         </div>
-        <h2>Week of {draft.weekStart}</h2>
+        <h2>{weeklyLogTitle(draft)}</h2>
         <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
         <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
         <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
@@ -935,10 +953,22 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
         <button type="submit">Save weekly log</button>
       </form>
       <Panel title="Saved weekly logs">
-        {data.weeklyLogs.length === 0 ? <p className="empty">No weekly logs yet.</p> : data.weeklyLogs.map((log) => (
-          <article className="miniCard" key={log.id}>
-            <div className="cardHead"><strong>Week of {log.weekStart}</strong><button type="button" onClick={() => deleteWeeklyLog(log)}>Delete</button></div>
-            <p className="preline">{compactLog(log)}</p>
+        <div className="rowPanel">
+          <label>Month<input type="month" value={monthFilter} list="weekly-log-months" onChange={(event) => setMonthFilter(event.target.value)} /></label>
+          <label>Specific week<input type="date" value={weekFilter} onChange={(event) => setWeekFilter(event.target.value)} /></label>
+          {monthFilter || weekFilter ? <button type="button" onClick={() => { setMonthFilter(''); setWeekFilter(''); }}>Clear filters</button> : null}
+          <datalist id="weekly-log-months">{monthOptions.map((month) => <option value={month} key={month}>{formatMonthLabel(month)}</option>)}</datalist>
+        </div>
+        {data.weeklyLogs.length === 0 ? <p className="empty">No weekly logs yet.</p> : visibleLogs.length === 0 ? <p className="empty">No matching weekly logs.</p> : visibleLogs.map((log) => (
+          <article className="compactRow" key={log.id}>
+            <details>
+              <summary><span>{weeklyLogTitle(log)}</span></summary>
+              <div className="rowActions">
+                <button type="button" className="iconButton" aria-label={`Edit ${weeklyLogTitle(log)}`} onClick={() => editLog(log)}>✎</button>
+                <button type="button" aria-label={`Delete ${weeklyLogTitle(log)}`} onClick={() => deleteWeeklyLog(log)}>×</button>
+              </div>
+              <p className="preline">{compactLog(log)}</p>
+            </details>
           </article>
         ))}
       </Panel>
@@ -1014,6 +1044,7 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
   deleteQuestion: (question: QuestionEntry) => void;
 }) {
   const [query, setQuery] = useState('');
+  const [editingQuestionId, setEditingQuestionId] = useState('');
   const visibleQuestions = filterList(questions, query, (question) => [question.question, question.status, question.relatedSystem, question.notes]);
   return (
     <section className="grid">
@@ -1025,12 +1056,16 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
         {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
           <article className="compactRow" key={question.id}>
             <details>
-              <summary><span>{question.question}</span><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></summary>
+              <summary><span>{question.question}</span><span className="summaryDetail">{questionPreview(question)}</span></summary>
+              <div className="rowActions">
+                <button type="button" className="iconButton" aria-label={`Edit ${question.question}`} onClick={() => setEditingQuestionId((current) => current === question.id ? '' : question.id)}>✎</button>
+                <button type="button" aria-label={`Delete ${question.question}`} onClick={() => deleteQuestion(question)}>×</button>
+              </div>
+              <p className="compactMeta"><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></p>
               {question.relatedSystem ? <DetailBlock label="Related system" value={question.relatedSystem} /> : null}
               {question.notes ? <DetailBlock label="Notes / answer" value={question.notes} /> : null}
-              <details className="inlineEdit"><summary>Edit</summary><QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} compact /></details>
+              {editingQuestionId === question.id ? <QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} compact /> : null}
             </details>
-            <button type="button" onClick={() => deleteQuestion(question)}>Delete</button>
           </article>
         ))}
       </div>
@@ -1566,6 +1601,10 @@ export function glossaryTitle(entry: GlossaryEntry) {
   return `${entry.term} : ${entry.meaning}`;
 }
 
+export function questionPreview(question: QuestionEntry) {
+  return question.notes || 'No answer yet';
+}
+
 export function groupGlossary(glossary: GlossaryEntry[]): [string, GlossaryEntry[]][] {
   const sorted = [...glossary].sort((left, right) => left.term.localeCompare(right.term));
   const groups = new Map<string, GlossaryEntry[]>();
@@ -1575,6 +1614,17 @@ export function groupGlossary(glossary: GlossaryEntry[]): [string, GlossaryEntry
     groups.set(key, [...(groups.get(key) ?? []), entry]);
   });
   return [...groups.entries()];
+}
+
+export function weeklyLogTitle(log: Pick<WeeklyLog, 'weekStart'>) {
+  const start = new Date(`${log.weekStart}T12:00:00`);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 4);
+  return `Week of ${formatDateInput(start)} to ${formatDateInput(end)}`;
+}
+
+export function listWeeklyLogMonths(logs: WeeklyLog[]) {
+  return [...new Set(logs.map((log) => log.weekStart.slice(0, 7)).filter(Boolean))].sort((left, right) => right.localeCompare(left));
 }
 
 function formatMonthLabel(value: string) {
