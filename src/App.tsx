@@ -41,7 +41,7 @@ const emptyData: DayBookData = {
   glossary: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
-const standardNoteTemplate = 'Summary / What I learned\n\nContext / Where this is used\n\nDetails\n\nExample / command\n\nRelated systems\n\nTags\n\nOpen questions\n';
+const standardNoteTemplate = 'Summary\n_____________________________\n\nContext\n_____________________________\n\nDetails\n_____________________________\n\nExample / Command\n';
 const presetTags = ['pipeline', 'debugging', 'sql', 'python', 'database', 'cloud', 'manufacturing', 'process', 'system', 'troubleshooting'];
 const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
@@ -837,9 +837,11 @@ function KnowledgePage({ notes, prefill, addNote, deleteNote }: {
         <div className="notes">
           {visibleNotes.length === 0 ? null : visibleNotes.map((note) => (
             <article className="card" key={note.id}>
-              <div className="cardHead"><h3>{note.title}</h3><button type="button" onClick={() => deleteNote(note)}>Delete</button></div>
-              <p className="preline">{note.body}</p>
-              <Meta tags={note.tags} />
+              <div className="cardHead">
+                <div><h3>{note.title}</h3><Meta tags={note.tags} /></div>
+                <button type="button" onClick={() => deleteNote(note)}>Delete</button>
+              </div>
+              <details><summary>View note</summary><p className="preline">{note.body}</p></details>
             </article>
           ))}
         </div>

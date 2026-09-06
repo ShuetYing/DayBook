@@ -110,11 +110,12 @@ Store reusable, long-term personal work knowledge.
 ### Expected behaviour
 
 Notes should:
-- Use one standardised template covering title, summary, context, details, example/command, related systems, tags and open questions.
+- Use one standardised template covering title, tags, summary, context, details and example/command.
 - Not use categories.
 - Use tags as the main organisation method.
 - Allow custom tags.
 - Be searchable by title, body and tags.
+- Collapse saved note bodies by default and show title plus tags first.
 
 Recommended default tags:
 - pipeline
