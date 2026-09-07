@@ -108,6 +108,16 @@ export type GlossaryEntry = {
   updatedAt: string;
 };
 
+export type ScratchpadItem = {
+  id: string;
+  title: string;
+  context: string;
+  notes: string;
+  done: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AppSettings = {
   theme: 'mint' | 'sage' | 'cream' | 'sky' | 'rose' | 'graphite';
   density: 'comfortable' | 'compact';
@@ -143,5 +153,6 @@ export type DayBookData = {
   questions: QuestionEntry[];
   captures: QuickCapture[];
   glossary: GlossaryEntry[];
+  scratchpadItems: ScratchpadItem[];
   settings: AppSettings;
 };

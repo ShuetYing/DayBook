@@ -38,6 +38,15 @@ const data: DayBookData = {
     createdAt: '2026-09-03T08:00:00.000Z',
     updatedAt: '2026-09-03T08:00:00.000Z'
   }],
+  scratchpadItems: [{
+    id: 'scratchpad-1',
+    title: 'Feeling stuck after debugging',
+    context: '',
+    notes: '',
+    done: false,
+    createdAt: '2026-09-04T08:00:00.000Z',
+    updatedAt: '2026-09-04T08:00:00.000Z'
+  }],
   settings: { theme: 'mint', density: 'comfortable' }
 };
 
@@ -102,6 +111,10 @@ describe('global search', () => {
   it('includes matching glossary terms', () => {
     expect(searchData(data, 'statistical').map((result) => result.type)).toEqual(['Glossary']);
   });
+
+  it('includes matching scratchpad items', () => {
+    expect(searchData(data, 'debugging').map((result) => result.type)).toEqual(['Scratchpad']);
+  });
 });
 
 describe('daily backup schedule', () => {
@@ -113,11 +126,11 @@ describe('daily backup schedule', () => {
 
 describe('local data summary', () => {
   it('only shows stored record types', () => {
-    expect(localDataSummary(data)).toBe('1 task, 1 glossary term');
+    expect(localDataSummary(data)).toBe('1 task, 1 glossary term, 1 scratchpad item');
   });
 
   it('returns blank when no local records are stored', () => {
-    expect(localDataSummary({ ...data, tasks: [], glossary: [] })).toBe('');
+    expect(localDataSummary({ ...data, tasks: [], glossary: [], scratchpadItems: [] })).toBe('');
   });
 });
 

@@ -1,4 +1,4 @@
-import type { DayBookData, WeeklyLog } from './types';
+import type { DayBookData, ScratchpadItem, WeeklyLog } from './types';
 
 const DB_NAME = 'daybook';
 const STORE = 'kv';
@@ -15,11 +15,12 @@ const EMPTY_DATA: DayBookData = {
   questions: [],
   captures: [],
   glossary: [],
+  scratchpadItems: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
 
 export async function loadData(): Promise<DayBookData> {
-  const data = await read<Partial<DayBookData> & { weeklySummaries?: LegacyWeeklySummary[] }>(DATA_KEY);
+  const data = await read<Partial<DayBookData> & { weeklySummaries?: LegacyWeeklySummary[]; officeItems?: LegacyScratchpadItem[] }>(DATA_KEY);
   return {
     tasks: data?.tasks ?? [],
     notes: data?.notes ?? [],
@@ -31,6 +32,7 @@ export async function loadData(): Promise<DayBookData> {
     questions: data?.questions ?? [],
     captures: data?.captures ?? [],
     glossary: data?.glossary ?? [],
+    scratchpadItems: data?.scratchpadItems ?? (data?.officeItems ?? []).map(scratchpadFromOfficeItem),
     settings: { ...EMPTY_DATA.settings, ...data?.settings }
   };
 }
@@ -54,6 +56,12 @@ type LegacyWeeklySummary = {
   noteHighlights?: string[];
   createdAt: string;
 };
+
+type LegacyScratchpadItem = ScratchpadItem & { person?: string };
+
+function scratchpadFromOfficeItem(item: LegacyScratchpadItem): ScratchpadItem {
+  return { ...item, context: item.context ?? item.person ?? '' };
+}
 
 function summaryToLog(summary: LegacyWeeklySummary): WeeklyLog {
   return {

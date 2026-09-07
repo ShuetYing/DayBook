@@ -13,6 +13,7 @@ const emptyData: DayBookData = {
   questions: [],
   captures: [],
   glossary: [],
+  scratchpadItems: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
 

@@ -8,6 +8,7 @@ import type {
   DayBookData,
   GlossaryEntry,
   Note,
+  ScratchpadItem,
   Project,
   QuestionEntry,
   QuestionStatus,
@@ -19,7 +20,7 @@ import type {
   WeeklyLog
 } from './types';
 
-type Page = 'dashboard' | 'tasks' | 'projects' | 'knowledge' | 'glossary' | 'systems' | 'troubleshooting' | 'questions' | 'weekly' | 'search' | 'settings';
+type Page = 'dashboard' | 'tasks' | 'projects' | 'scratchpad' | 'knowledge' | 'glossary' | 'systems' | 'troubleshooting' | 'questions' | 'weekly' | 'search' | 'settings';
 type ProjectTab = 'overview' | 'subtasks' | 'timeline';
 type PrefillTarget = 'knowledge' | 'troubleshooting' | 'questions';
 type BackupFileHandle = {
@@ -39,6 +40,7 @@ const emptyData: DayBookData = {
   questions: [],
   captures: [],
   glossary: [],
+  scratchpadItems: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
 const standardNoteTemplate = 'Summary\n\n___________________________________________________________________\n\nContext\n\n___________________________________________________________________\n\nDetails\n\n___________________________________________________________________\n\nExample / Command\n';
@@ -47,6 +49,7 @@ const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'tasks', label: 'Tasks' },
   { page: 'projects', label: 'Projects' },
+  { page: 'scratchpad', label: 'Scratchpad' },
   { page: 'knowledge', label: 'Knowledge' },
   { page: 'glossary', label: 'Glossary' },
   { page: 'systems', label: 'Systems' },
@@ -60,6 +63,7 @@ const pageDescriptions: Record<Page, string> = {
   dashboard: 'Plan the week, capture work, and see what changed recently.',
   tasks: 'Track deadlines, blockers, reminders, and completed work.',
   projects: 'Keep project stages, linked tasks, and progress in one place.',
+  scratchpad: 'A low-pressure place for random reminders, thoughts, mood, or feelings.',
   knowledge: 'Save reusable notes, commands, and lessons learned.',
   glossary: 'Build a practical vocabulary for manufacturing and data work.',
   systems: 'Document important workflows, pipelines, and tools.',
@@ -302,6 +306,45 @@ export default function App() {
       activities: withActivity(current, `Deleted project: ${project.name}`, now)
     }));
     flashMessage(`Project deleted: ${project.name}`);
+  }
+
+  function addScratchpadItem(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    if (!title) return;
+    updateData((current, now) => ({
+      ...current,
+      scratchpadItems: [{
+        id: crypto.randomUUID(),
+        title,
+        context: '',
+        notes: '',
+        done: false,
+        createdAt: now,
+        updatedAt: now
+      }, ...current.scratchpadItems],
+      activities: withActivity(current, `Added scratchpad item: ${title}`, now)
+    }));
+    flashMessage('Scratchpad item saved.');
+    event.currentTarget.reset();
+  }
+
+  function toggleScratchpadItem(item: ScratchpadItem) {
+    updateData((current, now) => ({
+      ...current,
+      scratchpadItems: current.scratchpadItems.map((entry) => entry.id === item.id ? { ...entry, done: !entry.done, updatedAt: now } : entry),
+      activities: withActivity(current, `${item.done ? 'Reopened' : 'Completed'} scratchpad item: ${item.title}`, now)
+    }));
+  }
+
+  function deleteScratchpadItem(item: ScratchpadItem) {
+    updateData((current, now) => ({
+      ...current,
+      scratchpadItems: current.scratchpadItems.filter((entry) => entry.id !== item.id),
+      activities: withActivity(current, `Deleted scratchpad item: ${item.title}`, now)
+    }));
+    flashMessage('Scratchpad item deleted.');
   }
 
   function addNote(event: FormEvent<HTMLFormElement>) {
@@ -662,6 +705,7 @@ export default function App() {
         )}
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
         {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
+        {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
         {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} updateNote={updateNote} deleteNote={deleteNote} />}
         {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
         {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
@@ -836,6 +880,55 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
         })}
       </div>
     </section>
+  );
+}
+
+function ScratchpadPage({ items, addScratchpadItem, toggleScratchpadItem, deleteScratchpadItem }: {
+  items: ScratchpadItem[];
+  addScratchpadItem: (event: FormEvent<HTMLFormElement>) => void;
+  toggleScratchpadItem: (item: ScratchpadItem) => void;
+  deleteScratchpadItem: (item: ScratchpadItem) => void;
+}) {
+  const openItems = items.filter((item) => !item.done);
+  const doneItems = items.filter((item) => item.done);
+  return (
+    <section className="grid">
+      <form className="panel" onSubmit={addScratchpadItem}>
+        <h2>Add to scratchpad</h2>
+        <label>Write anything<textarea name="title" rows={4} required placeholder="..." /></label>
+        <button type="submit">Save to scratchpad</button>
+      </form>
+      <div className="stack">
+        <Panel title="Open">
+          <ScratchpadList items={openItems} empty="Nothing in the scratchpad yet." toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
+        </Panel>
+        <details className="panel">
+          <summary>Done ({doneItems.length})</summary>
+          <ScratchpadList items={doneItems} empty="No done scratchpad items yet." toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function ScratchpadList({ items, empty, toggleScratchpadItem, deleteScratchpadItem }: {
+  items: ScratchpadItem[];
+  empty: string;
+  toggleScratchpadItem: (item: ScratchpadItem) => void;
+  deleteScratchpadItem: (item: ScratchpadItem) => void;
+}) {
+  if (items.length === 0) return <p className="empty">{empty}</p>;
+  return (
+    <div className="taskList">
+      {items.map((item) => (
+        <article className={`card ${item.done ? 'done' : ''}`} key={item.id}>
+          <div className="cardHead">
+            <label className="check"><input type="checkbox" checked={item.done} onChange={() => toggleScratchpadItem(item)} /><span>{item.title}</span></label>
+            <button type="button" onClick={() => deleteScratchpadItem(item)}>Delete</button>
+          </div>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -1498,6 +1591,7 @@ function mergeImportedData(current: DayBookData, imported: Partial<DayBookData>)
     questions: mergeById(current.questions, imported.questions),
     captures: mergeById(current.captures, imported.captures),
     glossary: mergeById(current.glossary, imported.glossary),
+    scratchpadItems: mergeById(current.scratchpadItems, imported.scratchpadItems),
     settings: imported.settings ? { ...current.settings, ...imported.settings } : current.settings
   };
 }
@@ -1567,6 +1661,7 @@ export function searchData(data: DayBookData, query: string) {
     ...data.tasks.filter((task) => matches([task.title, task.notes, task.status, task.dueAt, task.roadblock, task.tags.join(' ')])).map((task) => ({ type: 'Task', id: task.id, title: task.title, detail: task.notes || task.roadblock || task.status, tags: task.tags })),
     ...data.notes.filter((note) => matches([note.title, note.body, note.tags.join(' ')])).map((note) => ({ type: 'Knowledge', id: note.id, title: note.title, detail: note.body.slice(0, 160), tags: note.tags })),
     ...data.glossary.filter((entry) => matches([entry.term, entry.meaning, entry.context])).map((entry) => ({ type: 'Glossary', id: entry.id, title: entry.term, detail: entry.meaning, tags: [] })),
+    ...data.scratchpadItems.filter((item) => matches([item.title, item.context, item.notes, item.done ? 'done' : 'open'])).map((item) => ({ type: 'Scratchpad', id: item.id, title: item.title, detail: item.context || item.notes || (item.done ? 'Done' : 'Open'), tags: [] })),
     ...data.weeklyLogs.filter((log) => matches([log.weekStart, log.learned, log.workedOn, log.blockers, weeklyContribution(log), log.nextWeek])).map((log) => ({ type: 'Weekly Log', id: log.id, title: `Week of ${log.weekStart}`, detail: compactLog(log).slice(0, 160), tags: [] })),
     ...data.systems.filter((system) => matches([system.name, system.purpose, systemSummary(system), system.commonFailures])).map((system) => ({ type: 'System', id: system.id, title: system.name, detail: system.purpose, tags: [] })),
     ...data.troubleshooting.filter((entry) => matches([entry.title, entry.symptoms, entry.error, entry.rootCause, entry.solution, entry.relatedSystem, entry.tags.join(' ')])).map((entry) => ({ type: 'Troubleshooting', id: entry.id, title: entry.title, detail: entry.solution || entry.rootCause || entry.symptoms, tags: entry.tags })),
@@ -1592,7 +1687,8 @@ export function localDataSummary(data: DayBookData) {
     ['system', data.systems.length],
     ['troubleshooting entry', data.troubleshooting.length],
     ['question', data.questions.length],
-    ['quick capture', data.captures.length]
+    ['quick capture', data.captures.length],
+    ['scratchpad item', data.scratchpadItems.length]
   ];
   return counts.filter(([, count]) => count).map(([label, count]) => `${count} ${label}${count === 1 ? '' : 's'}`).join(', ');
 }

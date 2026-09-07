@@ -82,6 +82,25 @@ Allow users to manage projects, including project details, sub-tasks and planned
 
 ---
 
+## Scratchpad
+
+Status: Implemented
+
+### Requirement
+
+Record random reminders, thoughts, mood notes, feelings, or loose ideas that do not belong in Tasks.
+
+### Expected behaviour
+
+Scratchpad items support:
+- One free-text entry
+- Done state
+
+Scratchpad items are separate from deadline-driven tasks.
+Users can mark scratchpad items done and delete them.
+
+---
+
 ## Glossary
 
 Status: Implemented
@@ -247,6 +266,7 @@ Search covers:
 - Tasks
 - Knowledge notes
 - Glossary terms
+- Scratchpad items
 - Weekly logs
 - Systems
 - Troubleshooting entries

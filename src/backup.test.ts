@@ -15,6 +15,7 @@ describe('backupBlob', () => {
       questions: [],
       captures: [{ id: 'capture-1', text: 'remember this', tags: ['work'], createdAt: '2026-08-30T09:00:00.000Z', updatedAt: '2026-08-30T09:00:00.000Z' }],
       glossary: [],
+      scratchpadItems: [],
       settings: { theme: 'mint', density: 'comfortable' }
     };
 
