@@ -117,10 +117,11 @@ describe('global search', () => {
   });
 });
 
-describe('daily backup schedule', () => {
-  it('targets the next local midnight', () => {
-    expect(msUntilNextBackup(new Date(2026, 8, 5, 23, 59, 0))).toBe(60_000);
-    expect(msUntilNextBackup(new Date(2026, 8, 5, 0, 0, 0))).toBe(86_400_000);
+describe('weekday backup schedule', () => {
+  it('targets the next weekday noon', () => {
+    expect(msUntilNextBackup(new Date(2026, 8, 7, 11, 59, 0))).toBe(60_000);
+    expect(msUntilNextBackup(new Date(2026, 8, 7, 12, 0, 0))).toBe(86_400_000);
+    expect(msUntilNextBackup(new Date(2026, 8, 11, 12, 1, 0))).toBe(259_140_000);
   });
 });
 

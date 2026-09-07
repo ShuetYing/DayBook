@@ -152,7 +152,7 @@ DayBook stores data locally in the browser with IndexedDB. There is no hosted ba
 
 Use `Settings > Export JSON` to download a backup. Use `Settings > Import` to merge another DayBook export into the current local data.
 
-Use `Settings > Choose backup file` to back up after changes and daily at 00:00 while DayBook is open. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
+Use `Settings > Choose backup file` to back up after changes and every weekday at 12:00 while DayBook is open. Pick a file inside a Google Drive, iCloud Drive, OneDrive, or similar synced folder if you want that backup copied to cloud storage by your desktop sync app.
 
 Auto backup depends on browser file picker support and cannot run while the browser/app is closed. If your browser does not support it, use manual JSON export.
 

@@ -310,7 +310,7 @@ Users can:
 - Clear all saved local data to start over.
 
 Exported data should be saved locally and import should preserve existing application data where appropriate.
-Auto backup should write the full local DayBook data object to the selected file after data changes and at 00:00 daily while the app is open.
+Auto backup should write the full local DayBook data object to the selected file after data changes and every weekday at 12:00 while the app is open.
 
 ---
 

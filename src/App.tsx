@@ -43,7 +43,7 @@ const emptyData: DayBookData = {
   scratchpadItems: [],
   settings: { theme: 'mint', density: 'comfortable' }
 };
-const standardNoteTemplate = 'Summary\n\n___________________________________________________________________\n\nContext\n\n___________________________________________________________________\n\nDetails\n\n___________________________________________________________________\n\nExample / Command\n';
+const standardNoteTemplate = '<Summary>\n\n___________________________________________________________________\n\n<Context>\n\n___________________________________________________________________\n\n<Details>\n\n___________________________________________________________________\n\n<Example / Command>\n';
 const presetTags = ['pipeline', 'debugging', 'sql', 'python', 'database', 'cloud', 'manufacturing', 'process', 'system', 'troubleshooting'];
 const navItems: { page: Page; label: string }[] = [
   { page: 'dashboard', label: 'Dashboard' },
@@ -119,14 +119,16 @@ export default function App() {
 
   useEffect(() => {
     if (!ready || !backupHandle) return;
-    let interval = 0;
-    const timer = window.setTimeout(() => {
-      void writeBackup(backupHandle, data, setBackupStatus);
-      interval = window.setInterval(() => void writeBackup(backupHandle, data, setBackupStatus), 86_400_000);
-    }, msUntilNextBackup());
+    let timer = 0;
+    const schedule = () => {
+      timer = window.setTimeout(() => {
+        void writeBackup(backupHandle, data, setBackupStatus);
+        schedule();
+      }, msUntilNextBackup());
+    };
+    schedule();
     return () => {
       window.clearTimeout(timer);
-      if (interval) window.clearInterval(interval);
     };
   }, [backupHandle, data, ready]);
 
@@ -1246,7 +1248,7 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
         </label>
       </Panel>
       <Panel title="Export"><p>Download a plain JSON backup for local storage or another device.</p><button type="button" onClick={exportJson}>Export JSON</button></Panel>
-      <Panel title="Auto backup"><p>Backs up after changes and daily at 00:00 while DayBook is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
+      <Panel title="Auto backup"><p>Backs up after changes and every weekday at 12:00 while DayBook is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
       <Panel title="Import"><p>Import merges the selected DayBook JSON file into the current local data.</p><input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} /></Panel>
       <Panel title="Local data"><p>{localData || 'No local records stored yet.'}</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
     </section>
@@ -1668,7 +1670,9 @@ async function writeBackup(handle: BackupFileHandle, data: DayBookData, setBacku
 
 export function msUntilNextBackup(now = new Date()) {
   const next = new Date(now);
-  next.setHours(24, 0, 0, 0);
+  next.setHours(12, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  while (next.getDay() === 0 || next.getDay() === 6) next.setDate(next.getDate() + 1);
   return next.getTime() - now.getTime();
 }
 
