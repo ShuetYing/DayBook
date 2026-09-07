@@ -25,6 +25,20 @@ Clicking a feature navigates to its dedicated page.
 
 ---
 
+## Undo
+
+Status: Implemented
+
+### Requirement
+
+Allow users to recover from accidental changes.
+
+### Expected behaviour
+
+The app offers one-step undo after data-changing actions such as creating, editing, importing, clearing or deleting records.
+
+---
+
 ## Dashboard
 
 Status: Implemented
@@ -139,7 +153,8 @@ Notes should:
 - Allow custom tags.
 - Be searchable by title, body and tags.
 - Collapse saved note bodies by default and show only the title first.
-- Open a selected saved note in a full note reader with tags and edit/delete icon actions.
+- Show the add-note form on the left and saved-note search/title list on the right.
+- Open a selected saved note in a full-page reader with tags and edit/delete icon actions.
 
 Recommended default tags:
 - pipeline

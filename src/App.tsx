@@ -76,6 +76,7 @@ const pageDescriptions: Record<Page, string> = {
 
 export default function App() {
   const [data, setData] = useState<DayBookData>(emptyData);
+  const [undoData, setUndoData] = useState<DayBookData | null>(null);
   const [ready, setReady] = useState(false);
   const [page, setPage] = useState<Page>('dashboard');
   const [message, setMessage] = useState('');
@@ -90,6 +91,8 @@ export default function App() {
   const [expandedDashboardTasks, setExpandedDashboardTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Record<string, boolean>>({});
   const [expandedProjects, setExpandedProjects] = useState<Record<string, boolean>>({});
+  const [selectedKnowledgeId, setSelectedKnowledgeId] = useState('');
+  const [editingSelectedKnowledge, setEditingSelectedKnowledge] = useState(false);
   const notified = useRef(new Set<string>());
   const notifiedWeeklyLogs = useRef(new Set<string>());
   const messageTimer = useRef<number | null>(null);
@@ -165,7 +168,17 @@ export default function App() {
 
   function updateData(change: (current: DayBookData, now: string) => DayBookData) {
     const now = new Date().toISOString();
-    setData((current) => change(current, now));
+    setData((current) => {
+      setUndoData(current);
+      return change(current, now);
+    });
+  }
+
+  function undoLastChange() {
+    if (!undoData) return;
+    setData(undoData);
+    setUndoData(null);
+    flashMessage('Last change undone.');
   }
 
   function flashMessage(text: string) {
@@ -644,7 +657,10 @@ export default function App() {
     if (!file) return;
     try {
       const parsed = JSON.parse(await file.text()) as Partial<DayBookData>;
-      setData((current) => mergeImportedData(current, parsed));
+      setData((current) => {
+        setUndoData(current);
+        return mergeImportedData(current, parsed);
+      });
       flashMessage('Imported JSON data.');
     } catch {
       flashMessage('Import failed. Pick a valid DayBook JSON file.');
@@ -652,6 +668,7 @@ export default function App() {
   }
 
   function clearAllData() {
+    setUndoData(data);
     setData(emptyData);
     setExpandedTasks({});
     setExpandedProjects({});
@@ -659,6 +676,30 @@ export default function App() {
     notified.current.clear();
     notifiedWeeklyLogs.current.clear();
     flashMessage('All local DayBook data removed.');
+  }
+
+  const selectedKnowledge = data.notes.find((note) => note.id === selectedKnowledgeId);
+  if (selectedKnowledge) {
+    return (
+      <main className="shell noteFullPage">
+        <div className={`notice ${message ? 'show' : ''}`} aria-live="polite">{message}</div>
+        <article className="panel noteReader">
+          <div className="cardHead">
+            <div>
+              <button type="button" onClick={() => { setSelectedKnowledgeId(''); setEditingSelectedKnowledge(false); }}>Back to knowledge</button>
+              <h1>{selectedKnowledge.title}</h1>
+            </div>
+            <div className="rowActions">
+              {undoData ? <button type="button" className="iconButton" aria-label="Undo last change" onClick={undoLastChange}>↶</button> : null}
+              <button type="button" className="iconButton" aria-label={`Edit ${selectedKnowledge.title}`} onClick={() => setEditingSelectedKnowledge((value) => !value)}>✎</button>
+              <button type="button" aria-label={`Delete ${selectedKnowledge.title}`} onClick={() => { deleteNote(selectedKnowledge); setSelectedKnowledgeId(''); }}>×</button>
+            </div>
+          </div>
+          <Meta tags={selectedKnowledge.tags} />
+          {editingSelectedKnowledge ? <KnowledgeForm title="Edit note" note={selectedKnowledge} onSubmit={(event) => { updateNote(event, selectedKnowledge.id); setEditingSelectedKnowledge(false); }} /> : <p className="preline">{selectedKnowledge.body}</p>}
+        </article>
+      </main>
+    );
   }
 
   return (
@@ -686,6 +727,7 @@ export default function App() {
         </header>
 
         <div className={`notice ${message ? 'show' : ''}`} aria-live="polite">{message}</div>
+        {undoData ? <button type="button" className="undoButton" onClick={undoLastChange}>Undo last change</button> : null}
 
         {page === 'dashboard' && (
           <Dashboard
@@ -706,7 +748,7 @@ export default function App() {
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
         {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
         {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
-        {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} updateNote={updateNote} deleteNote={deleteNote} />}
+        {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} openNote={(id) => { setSelectedKnowledgeId(id); setEditingSelectedKnowledge(false); }} />}
         {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
         {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
         {page === 'systems' && <SystemsPage systems={data.systems} addSystem={addSystem} updateSystem={updateSystem} deleteSystem={deleteSystem} />}
@@ -932,45 +974,28 @@ function ScratchpadList({ items, empty, toggleScratchpadItem, deleteScratchpadIt
   );
 }
 
-function KnowledgePage({ notes, prefill, addNote, updateNote, deleteNote }: {
+function KnowledgePage({ notes, prefill, addNote, openNote }: {
   notes: Note[];
   prefill?: string;
   addNote: (event: FormEvent<HTMLFormElement>) => void;
-  updateNote: (event: FormEvent<HTMLFormElement>, id: string) => void;
-  deleteNote: (note: Note) => void;
+  openNote: (id: string) => void;
 }) {
   const [noteQuery, setNoteQuery] = useState('');
-  const [editingNoteId, setEditingNoteId] = useState('');
-  const [selectedNoteId, setSelectedNoteId] = useState('');
   const query = noteQuery.toLowerCase();
   const visibleNotes = notes.filter((note) => [note.title, note.body, note.tags.join(' ')].join(' ').toLowerCase().includes(query));
-  const selectedNote = notes.find((note) => note.id === selectedNoteId) ?? visibleNotes[0];
   return (
-    <section className="knowledgeLayout">
-      <div className="stack">
-        <KnowledgeForm title="Add knowledge note" prefill={prefill} onSubmit={addNote} />
-        <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="sql, process, error..." /></label>
+    <section className="grid">
+      <KnowledgeForm title="Add knowledge note" prefill={prefill} onSubmit={addNote} />
+      <Panel title="Saved notes">
+        <label className="search">Search notes<input value={noteQuery} onChange={(event) => setNoteQuery(event.target.value)} placeholder="..." /></label>
         <div className="compactRows">
           {visibleNotes.length === 0 ? <p className="empty">{notes.length === 0 ? 'No knowledge notes yet.' : 'No matching notes.'}</p> : visibleNotes.map((note) => (
             <article className="compactRow" key={note.id}>
-              <button type="button" className={`noteTitleButton ${selectedNote?.id === note.id ? 'active' : ''}`} onClick={() => { setSelectedNoteId(note.id); setEditingNoteId(''); }}>{note.title}</button>
+              <button type="button" className="noteTitleButton" onClick={() => openNote(note.id)}>{note.title}</button>
             </article>
           ))}
         </div>
-      </div>
-      {selectedNote ? (
-        <article className="panel noteReader">
-          <div className="cardHead">
-            <h2>{selectedNote.title}</h2>
-            <div className="rowActions">
-              <button type="button" className="iconButton" aria-label={`Edit ${selectedNote.title}`} onClick={() => setEditingNoteId((current) => current === selectedNote.id ? '' : selectedNote.id)}>✎</button>
-              <button type="button" aria-label={`Delete ${selectedNote.title}`} onClick={() => { deleteNote(selectedNote); setSelectedNoteId(''); }}>×</button>
-            </div>
-          </div>
-          <Meta tags={selectedNote.tags} />
-          {editingNoteId === selectedNote.id ? <KnowledgeForm title="Edit note" note={selectedNote} onSubmit={(event) => updateNote(event, selectedNote.id)} /> : <p className="preline">{selectedNote.body}</p>}
-        </article>
-      ) : null}
+      </Panel>
     </section>
   );
 }

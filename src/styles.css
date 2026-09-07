@@ -130,7 +130,7 @@ button:hover {
   position: sticky;
   top: 0;
   height: 100vh;
-  padding: 22px;
+  padding: 18px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.34), transparent),
     var(--surface);
@@ -139,7 +139,7 @@ button:hover {
 }
 
 .brand {
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .sidebar h1 {
@@ -160,12 +160,12 @@ button:hover {
 
 .sidebar nav {
   display: grid;
-  gap: 8px;
+  gap: 5px;
 }
 
 .sidebar button {
   width: 100%;
-  padding: 0.58rem 0.7rem;
+  padding: 0.46rem 0.65rem;
   border-color: transparent;
   background: transparent;
   color: var(--accent);
@@ -423,13 +423,6 @@ h3 {
 .dashboardGrid,
 .columns {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
-}
-
-.knowledgeLayout {
-  display: grid;
-  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.35fr);
-  gap: 16px;
   align-items: start;
 }
 
@@ -903,6 +896,14 @@ button:focus-visible {
   padding: 0;
 }
 
+.noteFullPage {
+  width: min(920px, calc(100% - 32px));
+}
+
+.undoButton {
+  margin-bottom: 16px;
+}
+
 .inlineEdit {
   margin: 0 0.65rem 0.65rem;
   border-top: 1px solid var(--border);
@@ -1012,7 +1013,6 @@ summary {
   .topbar,
   .weekHero,
   .grid,
-  .knowledgeLayout,
   .dashboardGrid,
   .columns,
   .rowPanel {
