@@ -87,17 +87,23 @@ describe('completed task month helpers', () => {
 
 describe('project timeline helpers', () => {
   it('parses stage, date and detail rows', () => {
+    expect(parseProjectTimeline('Stage 1 | 2026-09-01 | 2026-09-04 | Gather requirements')).toEqual([
+      { name: 'Stage 1', start: '2026-09-01', end: '2026-09-04', detail: 'Gather requirements' }
+    ]);
+  });
+
+  it('keeps old single-date project stages readable', () => {
     expect(parseProjectTimeline('Stage 1 | 2026-09-01 | Gather requirements')).toEqual([
-      { name: 'Stage 1', due: '2026-09-01', detail: 'Gather requirements' }
+      { name: 'Stage 1', start: '2026-09-01', end: '2026-09-01', detail: 'Gather requirements' }
     ]);
   });
 
   it('serializes stage fields into saved timeline text', () => {
     expect(serializeProjectTimeline([
-      { name: 'Stage 1', due: '2026-09-01', detail: 'Gather requirements' },
-      { name: '', due: '', detail: '' },
-      { name: 'Stage 2', due: '2026-09-05', detail: 'Share update' }
-    ])).toBe('Stage 1 | 2026-09-01 | Gather requirements\nStage 2 | 2026-09-05 | Share update');
+      { name: 'Stage 1', start: '2026-09-01', end: '2026-09-04', detail: 'Gather requirements' },
+      { name: '', start: '', end: '', detail: '' },
+      { name: 'Stage 2', start: '2026-09-05', end: '2026-09-08', detail: 'Share update' }
+    ])).toBe('Stage 1 | 2026-09-01 | 2026-09-04 | Gather requirements\nStage 2 | 2026-09-05 | 2026-09-08 | Share update');
   });
 });
 

@@ -21,7 +21,7 @@ import type {
 } from './types';
 
 type Page = 'dashboard' | 'tasks' | 'projects' | 'scratchpad' | 'knowledge' | 'glossary' | 'systems' | 'troubleshooting' | 'questions' | 'weekly' | 'search' | 'settings';
-type ProjectTab = 'overview' | 'subtasks' | 'timeline';
+type ProjectTab = 'overview' | 'details' | 'timeline';
 type PrefillTarget = 'knowledge' | 'troubleshooting' | 'questions';
 type BackupFileHandle = {
   createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
@@ -265,6 +265,34 @@ export default function App() {
     flashMessage(`Task deleted: ${task.title}`);
   }
 
+  function addProjectTask(event: FormEvent<HTMLFormElement>, project: Project, stageName = '') {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    if (!title) return;
+
+    updateData((current, now) => ({
+      ...current,
+      tasks: [{
+        id: crypto.randomUUID(),
+        title,
+        notes: stageName ? `Stage: ${stageName}` : '',
+        status: 'todo',
+        dueAt: String(form.get('dueAt') || ''),
+        reminderAt: '',
+        roadblock: '',
+        category: '',
+        tags: [],
+        projectId: project.id,
+        createdAt: now,
+        updatedAt: now
+      }, ...current.tasks],
+      activities: withActivity(current, `Added project task: ${title}`, now)
+    }));
+    flashMessage(`Task linked to ${project.name}: ${title}`);
+    event.currentTarget.reset();
+  }
+
   function addProject(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -360,6 +388,19 @@ export default function App() {
       activities: withActivity(current, `Deleted scratchpad item: ${item.title}`, now)
     }));
     flashMessage('Scratchpad item deleted.');
+  }
+
+  function updateScratchpadItem(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const title = String(form.get('title') || '').trim();
+    if (!title) return;
+    updateData((current, now) => ({
+      ...current,
+      scratchpadItems: current.scratchpadItems.map((item) => item.id === id ? { ...item, title, updatedAt: now } : item),
+      activities: withActivity(current, `Updated scratchpad item: ${title}`, now)
+    }));
+    flashMessage('Scratchpad item updated.');
   }
 
   function addNote(event: FormEvent<HTMLFormElement>) {
@@ -748,8 +789,8 @@ export default function App() {
           />
         )}
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
-        {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
-        {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
+        {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} addProjectTask={addProjectTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
+        {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} updateScratchpadItem={updateScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
         {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} openNote={(id) => { setSelectedKnowledgeId(id); setEditingSelectedKnowledge(false); }} />}
         {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
         {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
@@ -851,8 +892,8 @@ function TasksPage({ data, addTask, updateTask, toggleTask, deleteTask, expanded
   const [showCreate, setShowCreate] = useState(data.tasks.length === 0);
   const [showCompleted, setShowCompleted] = useState(false);
   const [completedMonth, setCompletedMonth] = useState('');
-  const open = data.tasks.filter((task) => task.status !== 'done');
-  const done = data.tasks.filter((task) => task.status === 'done');
+  const open = sortTasksByDue(data.tasks.filter((task) => task.status !== 'done'));
+  const done = sortTasksByDue(data.tasks.filter((task) => task.status === 'done'));
   const completedMonths = listTaskMonths(done);
   const visibleDone = completedMonth ? done.filter((task) => taskMonth(task) === completedMonth) : done;
   return (
@@ -878,13 +919,16 @@ function TasksPage({ data, addTask, updateTask, toggleTask, deleteTask, expanded
   );
 }
 
-function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updateProject, deleteProject, expandedProjects, setExpandedProjects }: {
+function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updateProject, deleteProject, addProjectTask, toggleTask, deleteTask, expandedProjects, setExpandedProjects }: {
   data: DayBookData;
   projectTabs: Record<string, ProjectTab>;
   setProjectTabs: (tabs: Record<string, ProjectTab>) => void;
   addProject: (event: FormEvent<HTMLFormElement>) => void;
   updateProject: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteProject: (project: Project) => void;
+  addProjectTask: (event: FormEvent<HTMLFormElement>, project: Project, stageName?: string) => void;
+  toggleTask: (task: Task) => void;
+  deleteTask: (task: Task) => void;
   expandedProjects: Record<string, boolean>;
   setExpandedProjects: Dispatch<SetStateAction<Record<string, boolean>>>;
 }) {
@@ -897,26 +941,29 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
         {data.projects.length === 0 ? <p className="empty">No projects yet.</p> : data.projects.map((project) => {
           const tab = projectTabs[project.id] ?? 'overview';
           const subtasks = data.tasks.filter((task) => task.projectId === project.id);
+          const stages = parseProjectTimeline(project.timeline);
           const expanded = expandedProjects[project.id] ?? false;
+          const editing = expandedProjects[`${project.id}:edit`] ?? false;
           return (
             <article className="card" key={project.id}>
               <div className="cardHead">
                 <h3>{project.name}</h3>
                 <div className="cardActions">
-                  <button type="button" onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>{expanded ? 'Hide' : 'Details'}</button>
-                  <button type="button" onClick={() => deleteProject(project)}>Delete</button>
+                  <button type="button" className="iconButton" title={expanded ? 'Hide details' : 'Show details'} aria-label={expanded ? `Hide ${project.name} details` : `Show ${project.name} details`} onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>{expanded ? '⌃' : '⌄'}</button>
+                  <button type="button" className="iconButton" title="Edit project" aria-label={`Edit ${project.name}`} onClick={() => setExpandedProjects((current) => ({ ...current, [`${project.id}:edit`]: !editing, [project.id]: true }))}>✎</button>
+                  <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${project.name}`} onClick={() => deleteProject(project)}>×</button>
                 </div>
               </div>
               <ProjectSummary project={project} tasks={subtasks} showOverview={!expanded} />
               {!expanded ? null : (
                 <>
                   <div className="tabs">
-                    {(['overview', 'subtasks', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item === 'subtasks' ? 'Sub-tasks' : item}</button>)}
+                    {(['overview', 'details', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item}</button>)}
                   </div>
-                  {tab === 'overview' && <><DetailBlock label="Overview" value={project.overview || 'No overview yet.'} /><DetailBlock label="Details" value={project.details || 'No details yet.'} /></>}
-                  {tab === 'subtasks' && <TaskList tasks={subtasks} empty="No tasks linked to this project yet." compact />}
-                  {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} />}
-                  <details><summary>Edit project</summary><ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [project.id]: false }))} /></details>
+                  {tab === 'overview' && <DetailBlock label="Overview" value={project.overview || 'No overview yet.'} />}
+                  {tab === 'details' && <ProjectDetails stages={stages} tasks={subtasks} addProjectTask={(event, stageName) => addProjectTask(event, project, stageName)} toggleTask={toggleTask} deleteTask={deleteTask} />}
+                  {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} chartOnly />}
+                  {editing ? <ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [`${project.id}:edit`]: false }))} /> : null}
                 </>
               )}
             </article>
@@ -927,10 +974,11 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
   );
 }
 
-function ScratchpadPage({ items, addScratchpadItem, toggleScratchpadItem, deleteScratchpadItem }: {
+function ScratchpadPage({ items, addScratchpadItem, toggleScratchpadItem, updateScratchpadItem, deleteScratchpadItem }: {
   items: ScratchpadItem[];
   addScratchpadItem: (event: FormEvent<HTMLFormElement>) => void;
   toggleScratchpadItem: (item: ScratchpadItem) => void;
+  updateScratchpadItem: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteScratchpadItem: (item: ScratchpadItem) => void;
 }) {
   const openItems = items.filter((item) => !item.done);
@@ -944,23 +992,25 @@ function ScratchpadPage({ items, addScratchpadItem, toggleScratchpadItem, delete
       </form>
       <div className="stack">
         <Panel title="Open">
-          <ScratchpadList items={openItems} empty="Nothing in the scratchpad yet." toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
+          <ScratchpadList items={openItems} empty="Nothing in the scratchpad yet." toggleScratchpadItem={toggleScratchpadItem} updateScratchpadItem={updateScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
         </Panel>
         <details className="panel">
           <summary>Done ({doneItems.length})</summary>
-          <ScratchpadList items={doneItems} empty="No done scratchpad items yet." toggleScratchpadItem={toggleScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
+          <ScratchpadList items={doneItems} empty="No done scratchpad items yet." toggleScratchpadItem={toggleScratchpadItem} updateScratchpadItem={updateScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />
         </details>
       </div>
     </section>
   );
 }
 
-function ScratchpadList({ items, empty, toggleScratchpadItem, deleteScratchpadItem }: {
+function ScratchpadList({ items, empty, toggleScratchpadItem, updateScratchpadItem, deleteScratchpadItem }: {
   items: ScratchpadItem[];
   empty: string;
   toggleScratchpadItem: (item: ScratchpadItem) => void;
+  updateScratchpadItem: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteScratchpadItem: (item: ScratchpadItem) => void;
 }) {
+  const [editingId, setEditingId] = useState('');
   if (items.length === 0) return <p className="empty">{empty}</p>;
   return (
     <div className="taskList">
@@ -968,8 +1018,17 @@ function ScratchpadList({ items, empty, toggleScratchpadItem, deleteScratchpadIt
         <article className={`card ${item.done ? 'done' : ''}`} key={item.id}>
           <div className="cardHead">
             <label className="check"><input type="checkbox" checked={item.done} onChange={() => toggleScratchpadItem(item)} /><span>{item.title}</span></label>
-            <button type="button" onClick={() => deleteScratchpadItem(item)}>Delete</button>
+            <div className="cardActions">
+              <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${item.title}`} onClick={() => setEditingId((current) => current === item.id ? '' : item.id)}>✎</button>
+              <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${item.title}`} onClick={() => deleteScratchpadItem(item)}>×</button>
+            </div>
           </div>
+          {editingId === item.id ? (
+            <form className="inlineEditForm" onSubmit={(event) => { updateScratchpadItem(event, item.id); setEditingId(''); }}>
+              <label>Edit scratchpad item<textarea name="title" rows={3} required defaultValue={item.title} /></label>
+              <div className="formActions"><button type="submit">Save</button><button type="button" onClick={() => setEditingId('')}>Cancel</button></div>
+            </form>
+          ) : null}
         </article>
       ))}
     </div>
@@ -1093,7 +1152,7 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
                 <button type="button" className="iconButton" aria-label={`Edit ${weeklyLogTitle(log)}`} onClick={() => editLog(log)}>✎</button>
                 <button type="button" aria-label={`Delete ${weeklyLogTitle(log)}`} onClick={() => deleteWeeklyLog(log)}>×</button>
               </div>
-              <p className="preline">{compactLog(log)}</p>
+              <WeeklyLogDetails log={log} />
             </details>
           </article>
         ))}
@@ -1104,6 +1163,21 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
 
 function WeeklyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
   return <label>{label}<textarea rows={4} value={value} onChange={(event) => onChange(event.target.value)} placeholder="One item per line" /></label>;
+}
+
+function WeeklyLogDetails({ log }: { log: WeeklyLog }) {
+  const sections = weeklyLogSections(log);
+  if (sections.length === 0) return <p className="empty">No notes saved for this week.</p>;
+  return (
+    <div className="weeklyLogDetails">
+      {sections.map(([label, value]) => (
+        <section key={label}>
+          <h3>{label}</h3>
+          <p className="preline">{value}</p>
+        </section>
+      ))}
+    </div>
+  );
 }
 
 function SystemsPage({ systems, addSystem, updateSystem, deleteSystem }: {
@@ -1171,30 +1245,38 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
 }) {
   const [query, setQuery] = useState('');
   const [editingQuestionId, setEditingQuestionId] = useState('');
+  const [selectedQuestionId, setSelectedQuestionId] = useState('');
   const visibleQuestions = filterList(questions, query, (question) => [question.question, question.status, question.relatedSystem, question.notes]);
+  const selectedQuestion = questions.find((question) => question.id === selectedQuestionId);
   return (
-    <section className="grid">
+    <section className="grid questionPage">
       <QuestionForm title="Quick question" prefill={prefill} onSubmit={addQuestion} />
-      <div className="notes">
-        <Panel title="Find an answer">
-          <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
-        </Panel>
-        {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
-          <article className="compactRow" key={question.id}>
-            <details>
-              <summary><span>{question.question}</span><span className="summaryDetail">{questionPreview(question)}</span></summary>
-              <div className="rowActions">
-                <button type="button" className="iconButton" aria-label={`Edit ${question.question}`} onClick={() => setEditingQuestionId((current) => current === question.id ? '' : question.id)}>✎</button>
-                <button type="button" aria-label={`Delete ${question.question}`} onClick={() => deleteQuestion(question)}>×</button>
+      <Panel title="Questions">
+        <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
+        <div className="questionCards">
+          {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
+            <button type="button" className="questionCardButton" key={question.id} onClick={() => { setSelectedQuestionId(question.id); setEditingQuestionId(''); }}>{question.question}</button>
+          ))}
+        </div>
+      </Panel>
+      {selectedQuestion ? (
+        <div className="modalOverlay" role="dialog" aria-modal="true" aria-labelledby="question-dialog-title" onClick={() => setSelectedQuestionId('')}>
+          <article className="modalCard questionModal" onClick={(event) => event.stopPropagation()}>
+            <div className="cardHead">
+              <h3 id="question-dialog-title">{selectedQuestion.question}</h3>
+              <div className="cardActions">
+                <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${selectedQuestion.question}`} onClick={() => setEditingQuestionId((current) => current === selectedQuestion.id ? '' : selectedQuestion.id)}>✎</button>
+                <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${selectedQuestion.question}`} onClick={() => { deleteQuestion(selectedQuestion); setSelectedQuestionId(''); }}>×</button>
+                <button type="button" className="iconButton" title="Close" aria-label="Close question details" onClick={() => setSelectedQuestionId('')}>×</button>
               </div>
-              <p className="compactMeta"><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></p>
-              {question.relatedSystem ? <DetailBlock label="Related system" value={question.relatedSystem} /> : null}
-              {question.notes ? <DetailBlock label="Notes / answer" value={question.notes} /> : null}
-              {editingQuestionId === question.id ? <QuestionForm title="Edit question" question={question} onSubmit={(event) => updateQuestion(event, question.id)} compact /> : null}
-            </details>
+            </div>
+            <p><span className={`badge ${selectedQuestion.status === 'Answered' ? 'done' : 'todo'}`}>{selectedQuestion.status}</span></p>
+            {selectedQuestion.relatedSystem ? <DetailBlock label="Related system" value={selectedQuestion.relatedSystem} /> : null}
+            <DetailBlock label="Answer" value={questionPreview(selectedQuestion)} />
+            {editingQuestionId === selectedQuestion.id ? <QuestionForm title="Edit question" question={selectedQuestion} onSubmit={(event) => updateQuestion(event, selectedQuestion.id)} compact /> : null}
           </article>
-        ))}
-      </div>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1231,7 +1313,6 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
   updateSettings: (settings: AppSettings) => void;
   clearAllData: () => void;
 }) {
-  const localData = localDataSummary(data);
   return (
     <section className="grid">
       <Panel title="Notifications"><p>Allow browser notifications for local reminders while DayBook is open.</p><button type="button" onClick={enableNotifications}>Enable reminders</button></Panel>
@@ -1247,10 +1328,9 @@ function SettingsPage({ data, exportJson, importJson, chooseBackupFile, backupSt
           </select>
         </label>
       </Panel>
-      <Panel title="Export"><p>Download a plain JSON backup for local storage or another device.</p><button type="button" onClick={exportJson}>Export JSON</button></Panel>
-      <Panel title="Auto backup"><p>Backs up after changes and every weekday at 12:00 while DayBook is open.</p><p className="metaLine">{backupStatus}</p><button type="button" onClick={chooseBackupFile}>Choose backup file</button></Panel>
+      <Panel title="Backup"><p>DayBook saves your work in this browser automatically. For a file copy, export before closing or choose a backup file when the browser still has permission.</p><p className="metaLine">{backupStatus}</p><div className="formActions"><button type="button" onClick={exportJson}>Export JSON</button><button type="button" onClick={chooseBackupFile}>Choose backup file</button></div></Panel>
       <Panel title="Import"><p>Import merges the selected DayBook JSON file into the current local data.</p><input type="file" accept="application/json" onChange={(event) => importJson(event.target.files?.[0])} /></Panel>
-      <Panel title="Local data"><p>{localData || 'No local records stored yet.'}</p><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
+      <Panel title="Local data"><button type="button" className="dangerButton" onClick={clearAllData}>Clear all local data</button></Panel>
     </section>
   );
 }
@@ -1306,15 +1386,18 @@ function GlossaryForm({ title = 'Add glossary term', entry, onSubmit }: { title?
 function ProjectForm({ title, project, onSubmit, onCancel }: { title: string; project?: Project; onSubmit: (event: FormEvent<HTMLFormElement>) => void; onCancel: () => void }) {
   const [stages, setStages] = useState(() => {
     const saved = parseProjectTimeline(project?.timeline ?? '');
-    return saved.length > 0 ? saved : [{ name: '', due: '', detail: '' }];
+    return saved.length > 0 ? saved : [{ name: '', start: '', end: '', detail: '' }];
   });
+  const [details, setDetails] = useState(project?.details ?? '');
+  const detailTemplate = projectDetailTemplate(stages);
+  const detailValue = details || detailTemplate;
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>{title}</h2>
       <label>Name<input name="name" required defaultValue={project?.name} placeholder="Warehouse cost review" /></label>
       <label>Overview<textarea name="overview" rows={3} defaultValue={project?.overview} /></label>
-      <label>Project details<textarea name="details" rows={4} defaultValue={project?.details} /></label>
       <ProjectStageFields stages={stages} setStages={setStages} />
+      <label>Project details<textarea name="details" rows={Math.max(6, stages.length * 4)} value={detailValue} onChange={(event) => setDetails(event.target.value)} /></label>
       <input type="hidden" name="timeline" value={serializeProjectTimeline(stages)} />
       <div className="formActions"><button type="submit">{project ? 'Save project' : 'Create project'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
     </form>
@@ -1334,12 +1417,13 @@ function ProjectStageFields({ stages, setStages }: {
       {stages.map((stage, index) => (
         <div className="stageFieldRow" key={index}>
           <label>Stage<input value={stage.name} onChange={(event) => updateStage(index, { name: event.target.value })} placeholder={`Stage ${index + 1}`} /></label>
-          <label>Date<input type="date" value={stage.due} onChange={(event) => updateStage(index, { due: event.target.value })} /></label>
+          <label>Start<input type="date" value={stage.start} onChange={(event) => updateStage(index, { start: event.target.value })} /></label>
+          <label>End<input type="date" value={stage.end} onChange={(event) => updateStage(index, { end: event.target.value })} /></label>
           <label>Details<input value={stage.detail} onChange={(event) => updateStage(index, { detail: event.target.value })} placeholder="Gather requirements" /></label>
-          <button type="button" onClick={() => setStages((current) => current.length === 1 ? [{ name: '', due: '', detail: '' }] : current.filter((_, stageIndex) => stageIndex !== index))}>Remove</button>
+          <button type="button" onClick={() => setStages((current) => current.length === 1 ? [{ name: '', start: '', end: '', detail: '' }] : current.filter((_, stageIndex) => stageIndex !== index))}>Remove</button>
         </div>
       ))}
-      <button type="button" onClick={() => setStages((current) => [...current, { name: '', due: '', detail: '' }])}>Add stage</button>
+      <button type="button" onClick={() => setStages((current) => [...current, { name: '', start: '', end: '', detail: '' }])}>Add stage</button>
     </fieldset>
   );
 }
@@ -1353,7 +1437,6 @@ function ProjectSummary({ project, tasks, showOverview }: { project: Project; ta
       <div className="projectStats">
         <span>{open} open</span>
         <span>{done} done</span>
-        <span>{parseProjectTimeline(project.timeline).length} stages</span>
       </div>
     </div>
   );
@@ -1361,6 +1444,52 @@ function ProjectSummary({ project, tasks, showOverview }: { project: Project; ta
 
 function DetailBlock({ label, value }: { label: string; value: string }) {
   return <div className="detailBlock"><strong>{label}</strong><p className="preline">{value}</p></div>;
+}
+
+function ProjectDetails({ stages, tasks, addProjectTask, toggleTask, deleteTask }: {
+  stages: ProjectStage[];
+  tasks: Task[];
+  addProjectTask: (event: FormEvent<HTMLFormElement>, stageName?: string) => void;
+  toggleTask: (task: Task) => void;
+  deleteTask: (task: Task) => void;
+}) {
+  const visibleStages = stages.filter((stage) => stage.name || stage.start || stage.end || stage.detail);
+  const taskStage = (task: Task) => task.notes.match(/^Stage:\s*(.+)$/m)?.[1]?.trim() ?? '';
+  if (visibleStages.length === 0 && tasks.length === 0) return <p className="empty">No project details yet.</p>;
+  return (
+    <div className="projectDetailsList">
+      {visibleStages.map((stage, index) => {
+        const title = stage.name || 'Untitled stage';
+        const stageTasks = tasks.filter((task) => taskStage(task).toLowerCase() === title.toLowerCase());
+        return (
+          <details className="stageDetail" key={`${title}-${index}`}>
+            <summary>
+              <strong>{stage.detail ? `${title} : ${stage.detail}` : title}</strong>
+              <span>{stageDateLabel(stage)}</span>
+            </summary>
+            <TaskList tasks={stageTasks} onToggle={toggleTask} onDelete={deleteTask} empty="No checklist tasks yet." compact />
+            <ProjectTaskForm onSubmit={(event) => addProjectTask(event, title)} />
+          </details>
+        );
+      })}
+      {tasks.filter((task) => !taskStage(task)).length > 0 ? (
+        <details className="stageDetail">
+          <summary><strong>Other project tasks</strong></summary>
+          <TaskList tasks={tasks.filter((task) => !taskStage(task))} onToggle={toggleTask} onDelete={deleteTask} empty="No other tasks." compact />
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function ProjectTaskForm({ onSubmit }: { onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
+  return (
+    <form className="projectTaskForm" onSubmit={onSubmit}>
+      <input name="title" required placeholder="Add a checklist task" />
+      <input name="dueAt" type="datetime-local" aria-label="Deadline" />
+      <button type="submit">Add</button>
+    </form>
+  );
 }
 
 function SystemForm({ title, system, onSubmit }: { title: string; system?: SystemEntry; onSubmit: (event: FormEvent<HTMLFormElement>) => void }) {
@@ -1414,37 +1543,88 @@ function QuestionForm({ title, question, prefill, onSubmit, compact = false }: {
   );
 }
 
-function ProjectTimeline({ timeline }: { timeline: string }) {
+function ProjectTimeline({ timeline, chartOnly = false }: { timeline: string; chartOnly?: boolean }) {
   const phases = parseProjectTimeline(timeline);
   if (phases.length === 0) return <p>No planned timeline yet.</p>;
+  const dated = phases.filter((phase) => phase.start || phase.end);
+  const bounds = timelineBounds(dated);
   return (
     <div className="timeline">
-      {phases.map((phase, index) => (
-        <div className="timelineRow" key={`${phase.name}-${index}`}>
-          <span className="timelineLabel">{phase.name}</span>
-          <span>{phase.due || 'No date'}</span>
+      {bounds ? (
+        <div className="stageChart">
+          {phases.map((phase, index) => {
+            const position = stagePosition(phase, bounds.start, bounds.days);
+            return (
+              <div className="stageChartRow" key={`${phase.name}-${index}`}>
+                <span className="timelineLabel">{phase.name || `Stage ${index + 1}`}</span>
+                <div className="stageTrack">
+                  <span className="stageBar" style={{ left: `${position.left}%`, width: `${position.width}%` }} />
+                </div>
+                <span className="timelineDetail">{stageDateLabel(phase)}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {!chartOnly ? phases.map((phase, index) => (
+        <div className="timelineRow" key={`row-${phase.name}-${index}`}>
+          <span className="timelineLabel">{phase.name || `Stage ${index + 1}`}</span>
+          <span>{stageDateLabel(phase)}</span>
           {phase.detail ? <span className="timelineDetail">{phase.detail}</span> : null}
         </div>
-      ))}
+      )) : null}
     </div>
   );
 }
 
-type ProjectStage = { name: string; due: string; detail: string };
+type ProjectStage = { name: string; start: string; end: string; detail: string };
 
 export function parseProjectTimeline(timeline: string): ProjectStage[] {
   return timeline.split('\n').map((item) => item.trim()).filter(Boolean).map((line) => {
-    const [name, due, detail] = line.split('|').map((item) => item.trim());
-    return { name, due, detail };
+    const [name, start, third, ...rest] = line.split('|').map((item) => item.trim());
+    if (rest.length === 0) return { name, start, end: start, detail: third ?? '' };
+    return { name, start, end: third, detail: rest.join(' | ') };
   });
 }
 
 export function serializeProjectTimeline(stages: ProjectStage[]) {
   return stages
-    .map((stage) => [stage.name, stage.due, stage.detail].map((value) => value.trim()))
-    .filter(([name, due, detail]) => name || due || detail)
-    .map(([name, due, detail]) => [name, due, detail].join(' | '))
+    .map((stage) => [stage.name, stage.start, stage.end, stage.detail].map((value) => value.trim()))
+    .filter(([name, start, end, detail]) => name || start || end || detail)
+    .map(([name, start, end, detail]) => [name, start, end, detail].join(' | '))
     .join('\n');
+}
+
+function projectDetailTemplate(stages: ProjectStage[]) {
+  return stages
+    .filter((stage) => stage.name || stage.start || stage.end || stage.detail)
+    .map((stage, index) => `${stage.name || `Stage ${index + 1}`} : ${stageDateLabel(stage)}\n[ ] \n[ ] \n${stage.detail ? `Details: ${stage.detail}` : 'Details: '}`)
+    .join('\n\n');
+}
+
+function stageDateLabel(stage: ProjectStage) {
+  if (stage.start && stage.end) return `${stage.start} - ${stage.end}`;
+  if (stage.start) return `${stage.start} - no end date`;
+  if (stage.end) return `No start date - ${stage.end}`;
+  return 'No dates yet';
+}
+
+function timelineBounds(stages: ProjectStage[]) {
+  const times = stages.flatMap((stage) => [stage.start, stage.end].filter(Boolean).map((value) => new Date(`${value}T12:00:00`).getTime())).filter(Number.isFinite);
+  if (times.length === 0) return null;
+  const start = Math.min(...times);
+  const end = Math.max(...times);
+  return { start, days: Math.max(1, Math.ceil((end - start) / 86_400_000) + 1) };
+}
+
+function stagePosition(stage: ProjectStage, chartStart: number, chartDays: number) {
+  const startTime = new Date(`${stage.start || stage.end}T12:00:00`).getTime();
+  const endTime = new Date(`${stage.end || stage.start}T12:00:00`).getTime();
+  const start = Number.isFinite(startTime) ? startTime : chartStart;
+  const end = Number.isFinite(endTime) ? endTime : start;
+  const left = Math.max(0, ((Math.min(start, end) - chartStart) / 86_400_000 / chartDays) * 100);
+  const width = Math.max(4, ((Math.abs(end - start) / 86_400_000 + 1) / chartDays) * 100);
+  return { left, width: Math.min(100 - left, width) };
 }
 
 function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, compact = false, expandedMap, setExpandedMap }: {
@@ -1466,8 +1646,8 @@ function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, co
           <div className="cardHead">
             <label className="check">{onToggle && <input type="checkbox" checked={task.status === 'done'} onChange={() => onToggle(task)} />}<span>{task.title}</span></label>
             <div className="cardActions">
-              {setExpandedMap && <button type="button" onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>{(expandedMap?.[task.id] ?? false) ? 'Hide' : 'Details'}</button>}
-              {onDelete && <button type="button" onClick={() => onDelete(task)}>Delete</button>}
+              {setExpandedMap && <button type="button" className="iconButton" title={(expandedMap?.[task.id] ?? false) ? 'Hide details' : 'Show details'} aria-label={(expandedMap?.[task.id] ?? false) ? `Hide ${task.title} details` : `Show ${task.title} details`} onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>{(expandedMap?.[task.id] ?? false) ? '⌃' : '⌄'}</button>}
+              {onDelete && <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${task.title}`} onClick={() => onDelete(task)}>×</button>}
             </div>
           </div>
           <div className="compactStack">
@@ -1707,6 +1887,15 @@ export function listTaskMonths(tasks: Task[]) {
   return [...new Set(tasks.map(taskMonth).filter(Boolean))].sort((left, right) => right.localeCompare(left));
 }
 
+function sortTasksByDue(tasks: Task[]) {
+  return [...tasks].sort((left, right) => {
+    const leftTime = left.dueAt ? new Date(left.dueAt).getTime() : Number.POSITIVE_INFINITY;
+    const rightTime = right.dueAt ? new Date(right.dueAt).getTime() : Number.POSITIVE_INFINITY;
+    if (leftTime !== rightTime) return leftTime - rightTime;
+    return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+  });
+}
+
 export function localDataSummary(data: DayBookData) {
   const counts: [string, number][] = [
     ['task', data.tasks.length],
@@ -1764,10 +1953,16 @@ function formatMonthLabel(value: string) {
 }
 
 function compactLog(log: WeeklyLog) {
+  return weeklyLogSections(log).map(([label, value]) => `${label}\n${value}`).join('\n\n');
+}
+
+function weeklyLogSections(log: WeeklyLog): [string, string][] {
   return [
     ['Learned', log.learned],
     ['Worked on', log.workedOn],
+    ['Problems / blockers', log.blockers],
     ['Problems solved / contribution', weeklyContribution(log)],
-    ['Next week', log.nextWeek]
-  ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join('\n\n');
+    ['Open questions', log.openQuestions],
+    ['Next week priorities', log.nextWeek]
+  ].filter((section): section is [string, string] => Boolean(section[1]));
 }

@@ -570,7 +570,8 @@ button:focus-visible {
 }
 
 .tabs {
-  margin-bottom: 12px;
+  margin-top: 14px;
+  margin-bottom: 14px;
 }
 
 .tabs button {
@@ -718,7 +719,7 @@ button:focus-visible {
 .sectionToggle {
   display: flex;
   gap: 12px;
-  align-items: end;
+  align-items: center;
   flex-wrap: wrap;
   margin-bottom: 16px;
 }
@@ -728,6 +729,22 @@ button:focus-visible {
   gap: 6px;
   margin: 0;
   font-weight: 750;
+}
+
+.sectionToggle .inlineField {
+  min-width: 180px;
+}
+
+.iconButton {
+  width: 2rem;
+  height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .compactStack {
@@ -743,8 +760,9 @@ button:focus-visible {
 
 .projectStats {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
+  margin-bottom: 8px;
 }
 
 .projectStats span {
@@ -862,15 +880,7 @@ button:focus-visible {
 }
 
 .rowActions button {
-  width: 2rem;
-  height: 2rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   margin: 0;
-  border-radius: 999px;
-  font-size: 1rem;
-  line-height: 1;
 }
 
 .noteTitleButton {
@@ -890,6 +900,52 @@ button:focus-visible {
 
 .noteReader {
   min-height: 420px;
+}
+
+.questionCardButton {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.8rem 0.9rem;
+  border-color: var(--border);
+  background: var(--panel);
+  color: var(--text);
+  text-align: left;
+  font-weight: 750;
+}
+
+.questionCardButton.active,
+.questionCardButton:hover,
+.questionCardButton:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.questionCards,
+.questionModal {
+  display: grid;
+  gap: 12px;
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(23, 35, 27, 0.28);
+}
+
+.modalCard {
+  width: min(680px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 24px 70px rgba(23, 35, 27, 0.22);
 }
 
 .noteReader .rowActions {
@@ -942,7 +998,7 @@ button:focus-visible {
 
 .stageFieldRow {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) 150px minmax(180px, 2fr) auto;
+  grid-template-columns: minmax(130px, 1fr) 145px 145px minmax(180px, 2fr) auto;
   gap: 10px;
   align-items: end;
 }
@@ -965,9 +1021,44 @@ button:focus-visible {
   gap: 10px;
 }
 
+.stageChart {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.stageChart.compact {
+  margin-top: 4px;
+}
+
+.stageChartRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(180px, 2fr) minmax(150px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.stageTrack {
+  position: relative;
+  min-height: 16px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.stageBar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 10px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
 .timelineRow {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) 120px minmax(0, 2fr);
+  grid-template-columns: minmax(130px, 1fr) 190px minmax(0, 2fr);
   gap: 12px;
   align-items: start;
   padding-bottom: 10px;
@@ -977,6 +1068,71 @@ button:focus-visible {
 .timelineLabel {
   color: #34463a;
   font-weight: 700;
+}
+
+.projectDetailsList {
+  display: grid;
+  gap: 10px;
+}
+
+.stageDetail {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.stageDetail p {
+  margin-bottom: 0;
+}
+
+.stageDetail summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  margin: -14px;
+  padding: 14px;
+}
+
+.stageDetail summary span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.stageDetail[open] {
+  display: grid;
+  gap: 12px;
+}
+
+.stageDetail .card {
+  box-shadow: none;
+}
+
+.projectTaskForm {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 220px auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.projectTaskForm input {
+  margin: 0;
+}
+
+.weeklyLogDetails {
+  display: grid;
+  gap: 18px;
+  padding: 0 0.65rem 0.65rem;
+}
+
+.weeklyLogDetails h3 {
+  margin-bottom: 8px;
+}
+
+.weeklyLogDetails p {
+  margin-bottom: 0;
 }
 
 details {
@@ -1029,6 +1185,8 @@ summary {
 
   .pageActions,
   .timelineRow,
+  .stageChartRow,
+  .projectTaskForm,
   .stageFieldRow {
     display: grid;
     grid-template-columns: 1fr;
