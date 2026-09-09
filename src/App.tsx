@@ -1,6 +1,6 @@
 import { Dispatch, FormEvent, ReactNode, SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
 import { backupBlob } from './backup';
-import { emptyWeeklyLog, formatDateInput, generateWeeklyReviewDraft, getWeekBounds, parseTags, weeklyLogReminderWeek } from './summary';
+import { emptyWeeklyLog, formatDateInput, getWeekBounds, parseTags, weeklyLogReminderWeek } from './summary';
 import { loadBackupHandle, loadData, saveBackupHandle, saveData } from './storage';
 import type {
   Activity,
@@ -735,7 +735,7 @@ export default function App() {
             <div className="rowActions">
               {undoData ? <button type="button" className="iconButton" aria-label="Undo last change" onClick={undoLastChange}>↶</button> : null}
               <button type="button" className="iconButton" aria-label={`Edit ${selectedKnowledge.title}`} onClick={() => setEditingSelectedKnowledge((value) => !value)}>✎</button>
-              <button type="button" aria-label={`Delete ${selectedKnowledge.title}`} onClick={() => { deleteNote(selectedKnowledge); setSelectedKnowledgeId(''); }}>×</button>
+              <button type="button" className="iconButton" aria-label={`Delete ${selectedKnowledge.title}`} onClick={() => { deleteNote(selectedKnowledge); setSelectedKnowledgeId(''); }}>🗑</button>
             </div>
           </div>
           <Meta tags={selectedKnowledge.tags} />
@@ -793,7 +793,7 @@ export default function App() {
         {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} updateScratchpadItem={updateScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
         {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} openNote={(id) => { setSelectedKnowledgeId(id); setEditingSelectedKnowledge(false); }} />}
         {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
-        {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} generateDraft={() => setWeeklyDraft(generateWeeklyReviewDraft(data, new Date(`${weekDate}T12:00:00`)))} />}
+        {page === 'weekly' && <WeeklyLogsPage data={data} weekDate={weekDate} setWeekDate={setWeekDate} draft={weeklyDraft} setDraft={setWeeklyDraft} saveWeeklyLog={saveWeeklyLog} deleteWeeklyLog={deleteWeeklyLog} />}
         {page === 'systems' && <SystemsPage systems={data.systems} addSystem={addSystem} updateSystem={updateSystem} deleteSystem={deleteSystem} />}
         {page === 'troubleshooting' && <TroubleshootingPage entries={data.troubleshooting} prefill={prefill.troubleshooting} addTroubleshooting={addTroubleshooting} updateTroubleshooting={updateTroubleshooting} deleteTroubleshooting={deleteTroubleshooting} />}
         {page === 'questions' && <QuestionsPage questions={data.questions} prefill={prefill.questions} addQuestion={addQuestion} updateQuestion={updateQuestion} deleteQuestion={deleteQuestion} />}
@@ -950,9 +950,9 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
               <div className="cardHead">
                 <h3>{project.name}</h3>
                 <div className="cardActions">
-                  <button type="button" className="iconButton" title={expanded ? 'Hide details' : 'Show details'} aria-label={expanded ? `Hide ${project.name} details` : `Show ${project.name} details`} onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>{expanded ? '⌃' : '⌄'}</button>
+                  <button type="button" className="iconButton" title={expanded ? 'Hide details' : 'Show details'} aria-label={expanded ? `Hide ${project.name} details` : `Show ${project.name} details`} onClick={() => setExpandedProjects((current) => ({ ...current, [project.id]: !expanded }))}>{expanded ? '▴' : '▾'}</button>
                   <button type="button" className="iconButton" title="Edit project" aria-label={`Edit ${project.name}`} onClick={() => setExpandedProjects((current) => ({ ...current, [`${project.id}:edit`]: !editing, [project.id]: true }))}>✎</button>
-                  <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${project.name}`} onClick={() => deleteProject(project)}>×</button>
+                  <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${project.name}`} onClick={() => deleteProject(project)}>🗑</button>
                 </div>
               </div>
               <ProjectSummary project={project} tasks={subtasks} showOverview={!expanded} />
@@ -1021,7 +1021,7 @@ function ScratchpadList({ items, empty, toggleScratchpadItem, updateScratchpadIt
             <label className="check"><input type="checkbox" checked={item.done} onChange={() => toggleScratchpadItem(item)} /><span>{item.title}</span></label>
             <div className="cardActions">
               <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${item.title}`} onClick={() => setEditingId((current) => current === item.id ? '' : item.id)}>✎</button>
-              <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${item.title}`} onClick={() => deleteScratchpadItem(item)}>×</button>
+              <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${item.title}`} onClick={() => deleteScratchpadItem(item)}>🗑</button>
             </div>
           </div>
           {editingId === item.id ? (
@@ -1089,7 +1089,7 @@ function GlossaryPage({ glossary, addGlossary, updateGlossary, deleteGlossary }:
                     <summary><span>{glossaryTitle(entry)}</span></summary>
                     <div className="rowActions">
                       <button type="button" className="iconButton" aria-label={`Edit ${entry.term}`} onClick={() => setEditingGlossaryId((current) => current === entry.id ? '' : entry.id)}>✎</button>
-                      <button type="button" aria-label={`Delete ${entry.term}`} onClick={() => deleteGlossary(entry)}>×</button>
+                      <button type="button" className="iconButton" aria-label={`Delete ${entry.term}`} onClick={() => deleteGlossary(entry)}>🗑</button>
                     </div>
                     {entry.context ? <DetailBlock label="Details" value={entry.context} /> : <p className="empty">No details yet.</p>}
                     {editingGlossaryId === entry.id ? <GlossaryForm title="Edit glossary term" entry={entry} onSubmit={(event) => updateGlossary(event, entry.id)} /> : null}
@@ -1104,7 +1104,7 @@ function GlossaryPage({ glossary, addGlossary, updateGlossary, deleteGlossary }:
   );
 }
 
-function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeeklyLog, deleteWeeklyLog, generateDraft }: {
+function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeeklyLog, deleteWeeklyLog }: {
   data: DayBookData;
   weekDate: string;
   setWeekDate: (value: string) => void;
@@ -1112,7 +1112,6 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
   setDraft: Dispatch<SetStateAction<WeeklyLog>>;
   saveWeeklyLog: (event: FormEvent<HTMLFormElement>) => void;
   deleteWeeklyLog: (log: WeeklyLog) => void;
-  generateDraft: () => void;
 }) {
   const [monthFilter, setMonthFilter] = useState('');
   const [weekFilter, setWeekFilter] = useState('');
@@ -1143,20 +1142,22 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
   };
   return (
     <section className="stack">
-      <form className="panel" onSubmit={saveAndReset} ref={editorRef}>
-        <div className="rowPanel">
-          <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
-          <button type="button" onClick={generateDraft}>Generate Weekly Review Draft</button>
-          {editingLogId ? <button type="button" onClick={clearEdit}>Cancel edit</button> : null}
-        </div>
-        <h2>{editingLogId ? `Editing ${weeklyLogTitle(draft)}` : weeklyLogTitle(draft)}</h2>
-        <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
-        <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
-        <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
-        <WeeklyField label="Problems solved / contribution" value={weeklyContribution(draft)} onChange={(value) => setDraft((current) => ({ ...current, solved: '', impact: value }))} />
-        <WeeklyField label="Next week priorities" value={draft.nextWeek} onChange={(value) => setDraft((current) => ({ ...current, nextWeek: value }))} />
-        <button type="submit">Save weekly log</button>
-      </form>
+      <details className="panel" open={Boolean(editingLogId)}>
+        <summary>{editingLogId ? `Editing ${weeklyLogTitle(draft)}` : 'Add weekly log'}</summary>
+        <form onSubmit={saveAndReset} ref={editorRef}>
+          <div className="rowPanel">
+            <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
+            {editingLogId ? <button type="button" onClick={clearEdit}>Cancel edit</button> : null}
+          </div>
+          <h2>{weeklyLogTitle(draft)}</h2>
+          <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
+          <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
+          <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
+          <WeeklyField label="Problems solved / contribution" value={weeklyContribution(draft)} onChange={(value) => setDraft((current) => ({ ...current, solved: '', impact: value }))} />
+          <WeeklyField label="Next week priorities" value={draft.nextWeek} onChange={(value) => setDraft((current) => ({ ...current, nextWeek: value }))} />
+          <button type="submit">Save weekly log</button>
+        </form>
+      </details>
       <Panel title="Saved weekly logs">
         <div className="rowPanel">
           <label>Month<input type="month" value={monthFilter} list="weekly-log-months" onChange={(event) => setMonthFilter(event.target.value)} /></label>
@@ -1170,7 +1171,7 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
               <summary><span>{weeklyLogTitle(log)}</span></summary>
               <div className="rowActions">
                 <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${weeklyLogTitle(log)}`} onClick={() => editLog(log)}>✎</button>
-                <button type="button" aria-label={`Delete ${weeklyLogTitle(log)}`} onClick={() => deleteWeeklyLog(log)}>×</button>
+                <button type="button" className="iconButton" aria-label={`Delete ${weeklyLogTitle(log)}`} onClick={() => deleteWeeklyLog(log)}>🗑</button>
               </div>
               <WeeklyLogDetails log={log} />
             </details>
@@ -1286,8 +1287,8 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
               <h3 id="question-dialog-title">{selectedQuestion.question}</h3>
               <div className="cardActions">
                 <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${selectedQuestion.question}`} onClick={() => setEditingQuestionId((current) => current === selectedQuestion.id ? '' : selectedQuestion.id)}>✎</button>
-                <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${selectedQuestion.question}`} onClick={() => { deleteQuestion(selectedQuestion); setSelectedQuestionId(''); }}>×</button>
-                <button type="button" className="iconButton" title="Close" aria-label="Close question details" onClick={() => setSelectedQuestionId('')}>×</button>
+                <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${selectedQuestion.question}`} onClick={() => { deleteQuestion(selectedQuestion); setSelectedQuestionId(''); }}>🗑</button>
+                <button type="button" className="iconButton" title="Close" aria-label="Close question details" onClick={() => setSelectedQuestionId('')}>←</button>
               </div>
             </div>
             <p><span className={`badge ${selectedQuestion.status === 'Answered' ? 'done' : 'todo'}`}>{selectedQuestion.status}</span></p>
@@ -1661,8 +1662,8 @@ function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, co
           <div className="cardHead">
             <label className="check">{onToggle && <input type="checkbox" checked={task.status === 'done'} onChange={() => onToggle(task)} />}<span>{task.title}</span></label>
             <div className="cardActions">
-              {setExpandedMap && <button type="button" className="iconButton" title={(expandedMap?.[task.id] ?? false) ? 'Hide details' : 'Show details'} aria-label={(expandedMap?.[task.id] ?? false) ? `Hide ${task.title} details` : `Show ${task.title} details`} onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>{(expandedMap?.[task.id] ?? false) ? '⌃' : '⌄'}</button>}
-              {onDelete && <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${task.title}`} onClick={() => onDelete(task)}>×</button>}
+              {setExpandedMap && <button type="button" className="iconButton" title={(expandedMap?.[task.id] ?? false) ? 'Hide details' : 'Show details'} aria-label={(expandedMap?.[task.id] ?? false) ? `Hide ${task.title} details` : `Show ${task.title} details`} onClick={() => setExpandedMap((current) => ({ ...current, [task.id]: !(expandedMap?.[task.id] ?? false) }))}>{(expandedMap?.[task.id] ?? false) ? '▴' : '▾'}</button>}
+              {onDelete && <button type="button" className="iconButton" title="Delete" aria-label={`Delete ${task.title}`} onClick={() => onDelete(task)}>🗑</button>}
             </div>
           </div>
           <div className="compactStack">

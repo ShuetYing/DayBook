@@ -1144,6 +1144,14 @@ summary {
   font-weight: 800;
 }
 
+summary::marker {
+  content: '▾  ';
+}
+
+details[open] > summary::marker {
+  content: '▴  ';
+}
+
 .preline {
   white-space: pre-line;
 }

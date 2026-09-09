@@ -192,7 +192,7 @@ Each section can contain multiple entries as plain text.
 Weekly logs are editable after creation.
 Saved weekly logs display as a Monday-to-Friday work-week range, such as `Week of 2026-08-31 to 2026-09-04`.
 Saved weekly logs can be filtered by month or by a specific week.
-The Generate Weekly Review Draft action uses local records created or updated during the selected week and remains editable before saving.
+The weekly log input form is collapsed by default.
 If DayBook is open on Friday at or after 3pm and no log exists for that week, show a local reminder once for that week.
 
 ---
