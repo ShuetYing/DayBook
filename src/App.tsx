@@ -21,7 +21,7 @@ import type {
 } from './types';
 
 type Page = 'dashboard' | 'tasks' | 'projects' | 'scratchpad' | 'knowledge' | 'glossary' | 'systems' | 'troubleshooting' | 'questions' | 'weekly' | 'search' | 'settings';
-type ProjectTab = 'overview' | 'details' | 'timeline';
+type ProjectTab = 'overview' | 'tasks' | 'timeline';
 type PrefillTarget = 'knowledge' | 'troubleshooting' | 'questions';
 type BackupFileHandle = {
   createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }>;
@@ -958,10 +958,10 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
               {!expanded ? null : (
                 <>
                   <div className="tabs">
-                    {(['overview', 'details', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item}</button>)}
+                    {(['overview', 'tasks', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item}</button>)}
                   </div>
                   {tab === 'overview' && <DetailBlock label="Overview" value={project.overview || 'No overview yet.'} />}
-                  {tab === 'details' && <ProjectDetails stages={stages} tasks={subtasks} addProjectTask={(event, stageName) => addProjectTask(event, project, stageName)} toggleTask={toggleTask} deleteTask={deleteTask} />}
+                  {tab === 'tasks' && <ProjectStageTasks stages={stages} tasks={subtasks} addProjectTask={(event, stageName) => addProjectTask(event, project, stageName)} toggleTask={toggleTask} deleteTask={deleteTask} />}
                   {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} chartOnly />}
                   {editing ? <ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [`${project.id}:edit`]: false }))} /> : null}
                 </>
@@ -1388,16 +1388,13 @@ function ProjectForm({ title, project, onSubmit, onCancel }: { title: string; pr
     const saved = parseProjectTimeline(project?.timeline ?? '');
     return saved.length > 0 ? saved : [{ name: '', start: '', end: '', detail: '' }];
   });
-  const [details, setDetails] = useState(project?.details ?? '');
-  const detailTemplate = projectDetailTemplate(stages);
-  const detailValue = details || detailTemplate;
   return (
     <form className="panel" onSubmit={onSubmit}>
       <h2>{title}</h2>
       <label>Name<input name="name" required defaultValue={project?.name} placeholder="Warehouse cost review" /></label>
       <label>Overview<textarea name="overview" rows={3} defaultValue={project?.overview} /></label>
       <ProjectStageFields stages={stages} setStages={setStages} />
-      <label>Project details<textarea name="details" rows={Math.max(6, stages.length * 4)} value={detailValue} onChange={(event) => setDetails(event.target.value)} /></label>
+      <input type="hidden" name="details" value={project?.details ?? ''} />
       <input type="hidden" name="timeline" value={serializeProjectTimeline(stages)} />
       <div className="formActions"><button type="submit">{project ? 'Save project' : 'Create project'}</button><button type="button" onClick={onCancel}>Cancel</button></div>
     </form>
@@ -1446,7 +1443,7 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
   return <div className="detailBlock"><strong>{label}</strong><p className="preline">{value}</p></div>;
 }
 
-function ProjectDetails({ stages, tasks, addProjectTask, toggleTask, deleteTask }: {
+function ProjectStageTasks({ stages, tasks, addProjectTask, toggleTask, deleteTask }: {
   stages: ProjectStage[];
   tasks: Task[];
   addProjectTask: (event: FormEvent<HTMLFormElement>, stageName?: string) => void;
@@ -1455,7 +1452,7 @@ function ProjectDetails({ stages, tasks, addProjectTask, toggleTask, deleteTask 
 }) {
   const visibleStages = stages.filter((stage) => stage.name || stage.start || stage.end || stage.detail);
   const taskStage = (task: Task) => task.notes.match(/^Stage:\s*(.+)$/m)?.[1]?.trim() ?? '';
-  if (visibleStages.length === 0 && tasks.length === 0) return <p className="empty">No project details yet.</p>;
+  if (visibleStages.length === 0 && tasks.length === 0) return <p className="empty">No project tasks yet.</p>;
   return (
     <div className="projectDetailsList">
       {visibleStages.map((stage, index) => {
@@ -1593,13 +1590,6 @@ export function serializeProjectTimeline(stages: ProjectStage[]) {
     .filter(([name, start, end, detail]) => name || start || end || detail)
     .map(([name, start, end, detail]) => [name, start, end, detail].join(' | '))
     .join('\n');
-}
-
-function projectDetailTemplate(stages: ProjectStage[]) {
-  return stages
-    .filter((stage) => stage.name || stage.start || stage.end || stage.detail)
-    .map((stage, index) => `${stage.name || `Stage ${index + 1}`} : ${stageDateLabel(stage)}\n[ ] \n[ ] \n${stage.detail ? `Details: ${stage.detail}` : 'Details: '}`)
-    .join('\n\n');
 }
 
 function stageDateLabel(stage: ProjectStage) {
