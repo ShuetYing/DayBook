@@ -789,7 +789,7 @@ export default function App() {
           />
         )}
         {page === 'tasks' && <TasksPage data={data} addTask={addTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedTasks={expandedTasks} setExpandedTasks={setExpandedTasks} />}
-        {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} addProjectTask={addProjectTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
+        {page === 'projects' && <ProjectsPage data={data} projectTabs={projectTabs} setProjectTabs={setProjectTabs} addProject={addProject} updateProject={updateProject} deleteProject={deleteProject} addProjectTask={addProjectTask} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} expandedProjects={expandedProjects} setExpandedProjects={setExpandedProjects} />}
         {page === 'scratchpad' && <ScratchpadPage items={data.scratchpadItems} addScratchpadItem={addScratchpadItem} toggleScratchpadItem={toggleScratchpadItem} updateScratchpadItem={updateScratchpadItem} deleteScratchpadItem={deleteScratchpadItem} />}
         {page === 'knowledge' && <KnowledgePage notes={data.notes} prefill={prefill.knowledge} addNote={addNote} openNote={(id) => { setSelectedKnowledgeId(id); setEditingSelectedKnowledge(false); }} />}
         {page === 'glossary' && <GlossaryPage glossary={data.glossary} addGlossary={addGlossary} updateGlossary={updateGlossary} deleteGlossary={deleteGlossary} />}
@@ -919,7 +919,7 @@ function TasksPage({ data, addTask, updateTask, toggleTask, deleteTask, expanded
   );
 }
 
-function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updateProject, deleteProject, addProjectTask, toggleTask, deleteTask, expandedProjects, setExpandedProjects }: {
+function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updateProject, deleteProject, addProjectTask, updateTask, toggleTask, deleteTask, expandedProjects, setExpandedProjects }: {
   data: DayBookData;
   projectTabs: Record<string, ProjectTab>;
   setProjectTabs: (tabs: Record<string, ProjectTab>) => void;
@@ -927,6 +927,7 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
   updateProject: (event: FormEvent<HTMLFormElement>, id: string) => void;
   deleteProject: (project: Project) => void;
   addProjectTask: (event: FormEvent<HTMLFormElement>, project: Project, stageName?: string) => void;
+  updateTask: (event: FormEvent<HTMLFormElement>, id: string) => void;
   toggleTask: (task: Task) => void;
   deleteTask: (task: Task) => void;
   expandedProjects: Record<string, boolean>;
@@ -961,7 +962,7 @@ function ProjectsPage({ data, projectTabs, setProjectTabs, addProject, updatePro
                     {(['overview', 'tasks', 'timeline'] as ProjectTab[]).map((item) => <button className={tab === item ? 'active' : ''} type="button" key={item} onClick={() => setProjectTabs({ ...projectTabs, [project.id]: item })}>{item}</button>)}
                   </div>
                   {tab === 'overview' && <DetailBlock label="Overview" value={project.overview || 'No overview yet.'} />}
-                  {tab === 'tasks' && <ProjectStageTasks stages={stages} tasks={subtasks} addProjectTask={(event, stageName) => addProjectTask(event, project, stageName)} toggleTask={toggleTask} deleteTask={deleteTask} />}
+                  {tab === 'tasks' && <ProjectStageTasks stages={stages} tasks={subtasks} projects={data.projects} expandedTasks={expandedProjects} setExpandedTasks={setExpandedProjects} addProjectTask={(event, stageName) => addProjectTask(event, project, stageName)} updateTask={updateTask} toggleTask={toggleTask} deleteTask={deleteTask} />}
                   {tab === 'timeline' && <ProjectTimeline timeline={project.timeline} chartOnly />}
                   {editing ? <ProjectForm title="Edit project" project={project} onSubmit={(event) => updateProject(event, project.id)} onCancel={() => setExpandedProjects((current) => ({ ...current, [`${project.id}:edit`]: false }))} /> : null}
                 </>
@@ -1115,21 +1116,40 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
 }) {
   const [monthFilter, setMonthFilter] = useState('');
   const [weekFilter, setWeekFilter] = useState('');
+  const [editingLogId, setEditingLogId] = useState('');
+  const editorRef = useRef<HTMLFormElement | null>(null);
   const selectedWeekStart = weekFilter ? formatDateInput(getWeekBounds(new Date(`${weekFilter}T12:00:00`)).start) : '';
   const monthOptions = listWeeklyLogMonths(data.weeklyLogs);
   const visibleLogs = data.weeklyLogs.filter((log) => (!monthFilter || log.weekStart.startsWith(monthFilter)) && (!selectedWeekStart || log.weekStart === selectedWeekStart));
   const editLog = (log: WeeklyLog) => {
+    setEditingLogId(log.id);
     setWeekDate(log.weekStart);
     setDraft(log);
+    window.requestAnimationFrame(() => {
+      editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      editorRef.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus();
+    });
+  };
+  const clearEdit = () => {
+    setEditingLogId('');
+    const weekStart = formatDateInput(getWeekBounds(new Date(`${weekDate}T12:00:00`)).start);
+    setDraft(emptyWeeklyLog(weekStart, new Date().toISOString()));
+  };
+  const saveAndReset = (event: FormEvent<HTMLFormElement>) => {
+    saveWeeklyLog(event);
+    setEditingLogId('');
+    const weekStart = formatDateInput(getWeekBounds(new Date(`${weekDate}T12:00:00`)).start);
+    setDraft(emptyWeeklyLog(weekStart, new Date().toISOString()));
   };
   return (
     <section className="stack">
-      <form className="panel" onSubmit={saveWeeklyLog}>
+      <form className="panel" onSubmit={saveAndReset} ref={editorRef}>
         <div className="rowPanel">
           <label>Pick week by date<input type="date" value={weekDate} onChange={(event) => setWeekDate(event.target.value)} /></label>
           <button type="button" onClick={generateDraft}>Generate Weekly Review Draft</button>
+          {editingLogId ? <button type="button" onClick={clearEdit}>Cancel edit</button> : null}
         </div>
-        <h2>{weeklyLogTitle(draft)}</h2>
+        <h2>{editingLogId ? `Editing ${weeklyLogTitle(draft)}` : weeklyLogTitle(draft)}</h2>
         <WeeklyField label="Learned" value={draft.learned} onChange={(value) => setDraft((current) => ({ ...current, learned: value }))} />
         <WeeklyField label="Worked on" value={draft.workedOn} onChange={(value) => setDraft((current) => ({ ...current, workedOn: value }))} />
         <WeeklyField label="Problems / blockers" value={draft.blockers} onChange={(value) => setDraft((current) => ({ ...current, blockers: value }))} />
@@ -1149,7 +1169,7 @@ function WeeklyLogsPage({ data, weekDate, setWeekDate, draft, setDraft, saveWeek
             <details>
               <summary><span>{weeklyLogTitle(log)}</span></summary>
               <div className="rowActions">
-                <button type="button" className="iconButton" aria-label={`Edit ${weeklyLogTitle(log)}`} onClick={() => editLog(log)}>✎</button>
+                <button type="button" className="iconButton" title="Edit" aria-label={`Edit ${weeklyLogTitle(log)}`} onClick={() => editLog(log)}>✎</button>
                 <button type="button" aria-label={`Delete ${weeklyLogTitle(log)}`} onClick={() => deleteWeeklyLog(log)}>×</button>
               </div>
               <WeeklyLogDetails log={log} />
@@ -1443,10 +1463,14 @@ function DetailBlock({ label, value }: { label: string; value: string }) {
   return <div className="detailBlock"><strong>{label}</strong><p className="preline">{value}</p></div>;
 }
 
-function ProjectStageTasks({ stages, tasks, addProjectTask, toggleTask, deleteTask }: {
+function ProjectStageTasks({ stages, tasks, projects, expandedTasks, setExpandedTasks, addProjectTask, updateTask, toggleTask, deleteTask }: {
   stages: ProjectStage[];
   tasks: Task[];
+  projects: Project[];
+  expandedTasks: Record<string, boolean>;
+  setExpandedTasks: Dispatch<SetStateAction<Record<string, boolean>>>;
   addProjectTask: (event: FormEvent<HTMLFormElement>, stageName?: string) => void;
+  updateTask: (event: FormEvent<HTMLFormElement>, id: string) => void;
   toggleTask: (task: Task) => void;
   deleteTask: (task: Task) => void;
 }) {
@@ -1464,7 +1488,7 @@ function ProjectStageTasks({ stages, tasks, addProjectTask, toggleTask, deleteTa
               <strong>{stage.detail ? `${title} : ${stage.detail}` : title}</strong>
               <span>{stageDateLabel(stage)}</span>
             </summary>
-            <TaskList tasks={stageTasks} onToggle={toggleTask} onDelete={deleteTask} empty="No checklist tasks yet." compact />
+            <TaskList tasks={stageTasks} projectsById={new Map(projects.map((project) => [project.id, project]))} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No checklist tasks yet." compact expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} allowCompactEdit />
             <ProjectTaskForm onSubmit={(event) => addProjectTask(event, title)} />
           </details>
         );
@@ -1472,7 +1496,7 @@ function ProjectStageTasks({ stages, tasks, addProjectTask, toggleTask, deleteTa
       {tasks.filter((task) => !taskStage(task)).length > 0 ? (
         <details className="stageDetail">
           <summary><strong>Other project tasks</strong></summary>
-          <TaskList tasks={tasks.filter((task) => !taskStage(task))} onToggle={toggleTask} onDelete={deleteTask} empty="No other tasks." compact />
+          <TaskList tasks={tasks.filter((task) => !taskStage(task))} projectsById={new Map(projects.map((project) => [project.id, project]))} onToggle={toggleTask} onDelete={deleteTask} onUpdate={updateTask} empty="No other tasks." compact expandedMap={expandedTasks} setExpandedMap={setExpandedTasks} allowCompactEdit />
         </details>
       ) : null}
     </div>
@@ -1617,7 +1641,7 @@ function stagePosition(stage: ProjectStage, chartStart: number, chartDays: numbe
   return { left, width: Math.min(100 - left, width) };
 }
 
-function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, compact = false, expandedMap, setExpandedMap }: {
+function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, compact = false, expandedMap, setExpandedMap, allowCompactEdit = false }: {
   tasks: Task[];
   projectsById?: Map<string, Project>;
   onToggle?: (task: Task) => void;
@@ -1627,6 +1651,7 @@ function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, co
   compact?: boolean;
   expandedMap?: Record<string, boolean>;
   setExpandedMap?: Dispatch<SetStateAction<Record<string, boolean>>>;
+  allowCompactEdit?: boolean;
 }) {
   if (tasks.length === 0) return <p className="empty">{empty}</p>;
   return (
@@ -1644,7 +1669,7 @@ function TaskList({ tasks, projectsById, onToggle, onDelete, onUpdate, empty, co
             <p><StatusBadge status={task.status} /> {task.dueAt && <span className="due">Due {new Date(task.dueAt).toLocaleString()}</span>} {task.projectId && projectsById?.get(task.projectId) ? <span className="due"> · {projectsById.get(task.projectId)?.name}</span> : null}</p>
             <Meta tags={task.tags} />
           </div>
-          {!compact && (expandedMap?.[task.id] ?? false) && onUpdate ? <div className="editSection"><TaskForm title="Edit task" task={task} projects={[...(projectsById?.values() ?? [])]} onSubmit={(event) => onUpdate(event, task.id)} onCancel={() => setExpandedMap?.((current) => ({ ...current, [task.id]: false }))} /></div> : null}
+          {(!compact || allowCompactEdit) && (expandedMap?.[task.id] ?? false) && onUpdate ? <div className="editSection"><TaskForm title="Edit task" task={task} projects={[...(projectsById?.values() ?? [])]} onSubmit={(event) => onUpdate(event, task.id)} onCancel={() => setExpandedMap?.((current) => ({ ...current, [task.id]: false }))} /></div> : null}
         </article>
       ))}
     </div>
