@@ -1276,7 +1276,7 @@ function QuestionsPage({ questions, prefill, addQuestion, updateQuestion, delete
         <label className="search">Search questions<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="owner, blocker, answer..." /></label>
         <div className="questionCards">
           {visibleQuestions.length === 0 ? <p className="empty">{questions.length === 0 ? 'No questions yet.' : 'No matching questions.'}</p> : visibleQuestions.map((question) => (
-            <button type="button" className="questionCardButton" key={question.id} onClick={() => { setSelectedQuestionId(question.id); setEditingQuestionId(''); }}>{question.question}</button>
+            <button type="button" className="questionCardButton" key={question.id} onClick={() => { setSelectedQuestionId(question.id); setEditingQuestionId(''); }}><span>{question.question}</span><span className={`badge ${question.status === 'Answered' ? 'done' : 'todo'}`}>{question.status}</span></button>
           ))}
         </div>
       </Panel>

@@ -905,12 +905,23 @@ button:focus-visible {
 .questionCardButton {
   width: 100%;
   min-height: 52px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: space-between;
   padding: 0.8rem 0.9rem;
   border-color: var(--border);
   background: var(--panel);
   color: var(--text);
   text-align: left;
   font-weight: 750;
+}
+
+.questionCardButton > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .questionCardButton.active,
